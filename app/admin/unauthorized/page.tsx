@@ -1,15 +1,15 @@
-import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import Link from "next/link";
 
 export default function UnauthorizedPage() {
   return (
-    <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-4">
-      <h1 className="text-4xl font-bold font-playfair text-destructive">Unauthorized</h1>
+    <div className="flex h-full flex-col items-center justify-center space-y-4">
+      <h1 className="text-4xl font-bold text-destructive">Yetkisiz Erişim</h1>
       <p className="text-muted-foreground text-center max-w-md">
-        You do not have the required permissions to view this page. If you believe this is an error, please contact a Super Admin.
+        Bu sayfayı görüntüleme yetkiniz yok. Daha fazla erişim iznine ihtiyacınız olduğunu düşünüyorsanız yöneticinizle iletişime geçin.
       </p>
       <Button asChild>
-        <Link href="/admin/products">Return to Dashboard</Link>
+        <Link href="/admin/products">Ürünlere Dön</Link>
       </Button>
     </div>
   );

@@ -5,6 +5,16 @@ import { axiosInstance } from "@/lib/axios";
 import { DataTable } from "@/components/ui/data-table";
 import { ColumnDef } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
+import { Spinner } from "@/components/ui/spinner";
+import Link from "next/link";
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb";
 
 type User = {
   id: string;
@@ -15,7 +25,7 @@ type User = {
 };
 
 export default function UsersPage() {
-  const { data: users, isLoading } = useQuery({
+  const { data: users, isLoading, isFetching, refetch } = useQuery({
     queryKey: ["users"],
     queryFn: async () => {
       const res = await axiosInstance.get<User[]>("/users");
@@ -26,15 +36,15 @@ export default function UsersPage() {
   const columns: ColumnDef<User>[] = [
     {
       accessorKey: "name",
-      header: "Name",
+      header: "İsim",
     },
     {
       accessorKey: "email",
-      header: "Email",
+      header: "E-posta",
     },
     {
       accessorKey: "role",
-      header: "Role",
+      header: "Rol",
       cell: ({ row }) => {
         const role = row.getValue("role") as string;
         return (
@@ -46,12 +56,12 @@ export default function UsersPage() {
     },
     {
       accessorKey: "status",
-      header: "Status",
+      header: "Durum",
       cell: ({ row }) => {
         const status = row.getValue("status") as string;
         return (
-          <Badge variant={status === "Active" ? "outline" : "destructive"}>
-            {status}
+          <Badge variant={status === "ACTIVE" ? "default" : "destructive"}>
+            {status === "ACTIVE" ? "Aktif" : "Pasif"}
           </Badge>
         );
       },
@@ -60,17 +70,34 @@ export default function UsersPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold tracking-tight text-foreground font-playfair">System Users</h2>
-        <p className="text-muted-foreground">
-          Manage system administrators and their roles.
-        </p>
+      <div className="flex items-center justify-between mb-2">
+        <Breadcrumb>
+          <BreadcrumbList>
+            <BreadcrumbItem>
+              <BreadcrumbLink render={<Link href="/admin" />}>
+                Dashboard
+              </BreadcrumbLink>
+            </BreadcrumbItem>
+            <BreadcrumbSeparator />
+            <BreadcrumbItem>
+              <BreadcrumbPage>Kullanıcılar</BreadcrumbPage>
+            </BreadcrumbItem>
+          </BreadcrumbList>
+        </Breadcrumb>
       </div>
       
       {isLoading ? (
-        <div className="text-center py-10">Loading users...</div>
+        <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
+          <Spinner size="lg" className="mb-4" />
+          <p>Kullanıcılar yükleniyor...</p>
+        </div>
       ) : (
-        <DataTable columns={columns} data={users || []} />
+        <DataTable 
+          columns={columns} 
+          data={users || []} 
+          onRefresh={() => refetch()} 
+          isRefreshing={isFetching}
+        />
       )}
     </div>
   );
