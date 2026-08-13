@@ -8,8 +8,8 @@ export default function UnauthorizedPage() {
       <p className="text-muted-foreground text-center max-w-md">
         Bu sayfayı görüntüleme yetkiniz yok. Daha fazla erişim iznine ihtiyacınız olduğunu düşünüyorsanız yöneticinizle iletişime geçin.
       </p>
-      <Button asChild>
-        <Link href="/admin/products">Ürünlere Dön</Link>
+      <Button render={<Link href="/admin/products" />}>
+        Ürünlere Dön
       </Button>
     </div>
   );
