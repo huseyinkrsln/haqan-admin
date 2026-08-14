@@ -15,7 +15,7 @@ const playfair = Playfair_Display({
 });
 
 export const metadata: Metadata = {
-  title: "E-Commerce Admin Dashboard",
+  title: "Haqan Admin Dashboard",
   description: "Light-themed standalone admin dashboard",
 };
 
