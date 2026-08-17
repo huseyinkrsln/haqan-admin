@@ -2,7 +2,7 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   // @ts-ignore
-  allowedDevOrigins: ["192.168.1.107"],
+  allowedDevOrigins: ["192.168.1.108"],
 };
 
 export default nextConfig;

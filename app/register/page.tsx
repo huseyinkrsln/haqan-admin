@@ -20,12 +20,32 @@ export default function RegisterPage() {
     e.preventDefault();
     setIsLoading(true);
     
-    // Simüle edilmiş kayıt işlemi (Gerçek bir API bağlandığında burası güncellenmeli)
-    setTimeout(() => {
+    try {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/v1/auth/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fullName: name,
+          email,
+          password
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        toast.error(data.message || "Kayıt işlemi başarısız oldu.");
+      } else {
+        toast.success("Kayıt başarılı! Giriş sayfasına yönlendiriliyorsunuz.");
+        setTimeout(() => {
+          router.push("/login");
+        }, 1500);
+      }
+    } catch (error) {
+      toast.error("Sunucuya bağlanırken bir hata oluştu.");
+    } finally {
       setIsLoading(false);
-      toast.success("Kayıt başarılı! Giriş sayfasına yönlendiriliyorsunuz.");
-      router.push("/login");
-    }, 1500);
+    }
   };
 
   return (

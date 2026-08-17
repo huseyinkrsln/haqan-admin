@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { LayoutDashboard, Users, Package, Settings, CreditCard, ChevronLeft, Menu } from "lucide-react";
+import { LayoutDashboard, Users, Package, Settings, CreditCard, ChevronLeft, Menu, Palette, Ruler, Tag, Sparkles, List } from "lucide-react";
 import { useSession } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/ui/logo";
@@ -21,6 +21,36 @@ export function Sidebar() {
       href: "/admin/products",
       icon: Package,
       roles: ["SUPER_ADMIN", "EDITOR", "VIEWER"],
+    },
+    {
+      title: "Kategoriler",
+      href: "/admin/categories",
+      icon: List,
+      roles: ["SUPER_ADMIN", "EDITOR"],
+    },
+    {
+      title: "Markalar",
+      href: "/admin/brands",
+      icon: Tag,
+      roles: ["SUPER_ADMIN", "EDITOR"],
+    },
+    {
+      title: "Renkler",
+      href: "/admin/colors",
+      icon: Palette,
+      roles: ["SUPER_ADMIN", "EDITOR"],
+    },
+    {
+      title: "Bedenler",
+      href: "/admin/sizes",
+      icon: Ruler,
+      roles: ["SUPER_ADMIN", "EDITOR"],
+    },
+    {
+      title: "Özellikler",
+      href: "/admin/features",
+      icon: Sparkles,
+      roles: ["SUPER_ADMIN", "EDITOR"],
     },
     {
       title: "Kullanıcılar",

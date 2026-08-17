@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { signIn } from "next-auth/react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ShieldCheck, Lock, Mail } from "lucide-react";
@@ -14,17 +16,26 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
+  const router = useRouter();
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    // Herkesi admin kabul edip SUPER_ADMIN rolüyle giriş yaptırıyoruz.
-    await signIn("credentials", { 
+
+    const result = await signIn("credentials", { 
       email, 
       password, 
-      role: "SUPER_ADMIN", 
-      callbackUrl: "/admin/products" 
+      redirect: false
     });
+
     setIsLoading(false);
+
+    if (result?.error) {
+      toast.error("Giriş başarısız. Lütfen bilgilerinizi kontrol edin.");
+    } else {
+      toast.success("Başarıyla giriş yapıldı!");
+      router.push("/admin/products");
+    }
   };
 
   return (
