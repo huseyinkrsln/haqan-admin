@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { ColumnDef } from "@tanstack/react-table";
 import Link from "next/link";
@@ -32,6 +33,7 @@ function getMinioUrl(path?: string) {
 }
 
 export default function BrandsPage() {
+  const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const { data: session } = useSession();
   const role = (session?.user as any)?.role;
@@ -39,6 +41,13 @@ export default function BrandsPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selected, setSelected] = useState<Brand | null>(null);
   const [toDelete, setToDelete] = useState<Brand | null>(null);
+
+  useEffect(() => {
+    if (searchParams.get("action") === "new") {
+      setSelected(null);
+      setDialogOpen(true);
+    }
+  }, [searchParams]);
 
   const { data, isLoading, isFetching, refetch } = useBrands();
   

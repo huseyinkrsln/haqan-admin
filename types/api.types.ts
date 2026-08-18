@@ -229,3 +229,206 @@ export interface PaginatedResult<T> {
 export interface DeletePayload {
   id: number;
 }
+
+// ─── Orders & OrderItems ──────────────────────────────────────────────────────
+
+export enum OrderStatusEnum {
+  All = 0,
+  Pending = 1,
+  Processing = 2,
+  Shipped = 3,
+  Delivered = 4,
+  Cancelled = 5,
+}
+
+export interface OrderCounts {
+  total: number;
+  pending: number;
+  processing: number;
+  shipped: number;
+  delivered: number;
+  cancelled: number;
+}
+
+export interface Order extends BaseEntity {
+  orderNumber: string;
+  userId: number;
+  shippingCarrierId: number;
+  orderDate: string;
+  estimatedDeliveryDate?: string;
+  totalAmount: number;
+  orderStatus: string; // "Pending" | "Processing" | "Shipped" | "Delivered" | "Cancelled"
+  trackingNumber?: string;
+  shippingFullName: string;
+  shippingPhoneNumber: string;
+  shippingAddressLine1: string;
+  shippingAddressLine2?: string;
+  shippingCountry: string;
+  shippingCity: string;
+  shippingDistrict: string;
+  billingFullName: string;
+  billingPhoneNumber: string;
+  billingAddressLine1: string;
+  billingAddressLine2?: string;
+  billingCountry: string;
+  billingCity: string;
+  billingDistrict: string;
+  orderItems?: OrderItem[];
+}
+
+export interface OrderItem extends BaseEntity {
+  orderId: number;
+  productVariantId: number;
+  quantity: number;
+  unitPrice: number;
+  productId?: number;
+  productName?: string;
+  productCode?: string;
+  colorName?: string;
+  colorHexCode?: string;
+  sizeName?: string;
+  sku?: string;
+  imageUrl?: string;
+  returnStatus?: string;
+  returnReason?: string;
+  returnDate?: string;
+  refundedAmount?: number;
+  variantInfo?: string;
+}
+
+export type UpdateOrderDto = Order;
+
+// ─── Coupons ─────────────────────────────────────────────────────────────────
+
+export interface Coupon extends BaseEntity {
+  code: string;
+  discountType: "Percentage" | "FixedAmount" | string;
+  value: number;
+  minOrderAmount: number;
+  startDate: string;
+  endDate: string;
+}
+
+export interface CreateCouponDto {
+  code: string;
+  discountType: string;
+  value: number;
+  minOrderAmount: number;
+  startDate: string;
+  endDate: string;
+}
+
+export interface UpdateCouponDto extends CreateCouponDto {
+  id: number;
+}
+
+// ─── Sliders ─────────────────────────────────────────────────────────────────
+
+export interface Slider extends BaseEntity {
+  title?: string;
+  subTitle?: string;
+  imageUrl: string;
+  mobileImageUrl?: string;
+  targetUrl?: string;
+  buttonText?: string;
+  displayOrder: number;
+  startDate?: string;
+  endDate?: string;
+}
+
+export interface CreateSliderDto {
+  title?: string;
+  subTitle?: string;
+  targetUrl?: string;
+  buttonText?: string;
+  displayOrder: number;
+  startDate?: string;
+  endDate?: string;
+  image?: File;
+  mobileImage?: File;
+}
+
+export interface UpdateSliderDto extends CreateSliderDto {
+  id: number;
+  imageUrl?: string;
+  mobileImageUrl?: string;
+}
+
+// ─── Shipping Carriers ───────────────────────────────────────────────────────
+
+export interface ShippingCarrier extends BaseEntity {
+  name: string;
+  basePrice?: number;
+  trackingUrlTemplate?: string;
+}
+
+// ─── Stock Movements ─────────────────────────────────────────────────────────
+
+export interface StockMovement extends BaseEntity {
+  productVariantId: number;
+  movementType: string;
+  quantity: number;
+  previousStock: number;
+  currentStock: number;
+  referenceType?: string;
+  referenceId?: string | number;
+  note?: string;
+  userId?: number;
+  createdDate?: string;
+}
+
+// ─── Carts ───────────────────────────────────────────────────────────────────
+
+export interface Cart extends BaseEntity {
+  cartToken: string;
+  userId?: number;
+  userFullName?: string;
+  userEmail?: string;
+  expiresAt: string;
+}
+
+export interface CartItem extends BaseEntity {
+  cartId: number;
+  productVariantId: number;
+  quantity: number;
+  productId?: number;
+  productName?: string;
+  productCode?: string;
+  colorName?: string;
+  colorHexCode?: string;
+  sizeName?: string;
+  sku?: string;
+  imageUrl?: string;
+  price?: number;
+}
+
+// ─── Favorites ───────────────────────────────────────────────────────────────
+
+export interface ProductFavorite extends BaseEntity {
+  userId: number;
+  productId: number;
+  productName?: string;
+  imageUrl?: string;
+  price?: number;
+  userFullName?: string;
+  userEmail?: string;
+  createdDate?: string;
+}
+
+// ─── Roles & Permissions ─────────────────────────────────────────────────────
+
+export interface Role extends BaseEntity {
+  groupName?: string;
+  GroupName?: string;
+}
+
+export interface OperationClaim extends BaseEntity {
+  name?: string;
+  alias?: string;
+  description?: string;
+}
+
+export interface GroupClaim extends BaseEntity {
+  groupId: number;
+  claimId: number;
+}

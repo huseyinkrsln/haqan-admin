@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { ColumnDef } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -49,20 +50,45 @@ import { Product, CreateComplexProductDto } from "@/types/api.types";
 export default function ProductsPage() {
   const { data: session } = useSession();
   const role = (session?.user as any)?.role;
+  const searchParams = useSearchParams();
+  const urlSearch = searchParams.get("search") || "";
 
   const [isWizardOpen, setIsWizardOpen] = useState(false);
   const [productToDelete, setProductToDelete] = useState<Product | null>(null);
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(urlSearch);
+  const [debouncedSearch, setDebouncedSearch] = useState(urlSearch);
 
   const { page, take, goToPage, goToNext, goToPrev, changePageSize } =
     useProductPagination();
+
+  useEffect(() => {
+    if (searchParams.get("action") === "new") {
+      setIsWizardOpen(true);
+    }
+  }, [searchParams]);
+
+  useEffect(() => {
+    if (urlSearch) {
+      setSearch(urlSearch);
+      setDebouncedSearch(urlSearch);
+      goToPage(1);
+    }
+  }, [urlSearch]);
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedSearch(search);
+      goToPage(1);
+    }, 300);
+    return () => clearTimeout(handler);
+  }, [search]);
 
   const {
     data: paginated,
     isLoading,
     isFetching,
     refetch,
-  } = useProducts({ page, take });
+  } = useProducts({ page, take, search: debouncedSearch });
 
   const products: Product[] = paginated?.data ?? [];
   const totalPages = paginated?.totalPages ?? 0;
@@ -98,14 +124,7 @@ export default function ProductsPage() {
     });
   };
 
-  // Filtrelenmiş ürünler (client-side arama, server pagination ile birlikte)
-  const filtered = search
-    ? products.filter(
-        (p) =>
-          p.name?.toLowerCase().includes(search.toLowerCase()) ||
-          p.slug?.toLowerCase().includes(search.toLowerCase())
-      )
-    : products;
+  const filtered = products;
 
   return (
     <div className="space-y-6">

@@ -2,19 +2,24 @@
 
 import { useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
-import { useQueryClient } from "@tanstack/react-query";
 import { ColumnDef } from "@tanstack/react-table";
 import Link from "next/link";
-import { Plus, Edit, Trash2 } from "lucide-react";
+import { Plus, Edit, Trash2, Truck, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 import { useSession } from "next-auth/react";
 
-import { useColors, useCreateColor, useUpdateColor, useDeleteColor } from "@/hooks/useColors";
-import { Color, CreateColorDto, UpdateColorDto } from "@/types/api.types";
+import {
+  useShippingCarriers,
+  useCreateShippingCarrier,
+  useUpdateShippingCarrier,
+  useDeleteShippingCarrier,
+} from "@/hooks/useShippingCarriers";
+import { ShippingCarrier } from "@/types/api.types";
 import { DataTable } from "@/components/ui/data-table";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
-import { GenericCrudDialog } from "@/components/admin/generic-crud-dialog";
+import { Badge } from "@/components/ui/badge";
+import { ShippingCarrierDialog } from "@/components/admin/shipping-carrier-dialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -34,26 +39,14 @@ import {
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
 
-const FIELDS = [
-  { key: "name", label: "Renk Adı", placeholder: "Siyah", required: true },
-  {
-    key: "hexCode",
-    label: "HEX Kodu",
-    placeholder: "#000000",
-    required: true,
-    type: "color" as const,
-  },
-];
-
-export default function ColorsPage() {
-  const queryClient = useQueryClient();
+export default function ShippingCarriersPage() {
   const { data: session } = useSession();
   const role = (session?.user as any)?.role;
   const searchParams = useSearchParams();
 
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [selected, setSelected] = useState<Color | null>(null);
-  const [toDelete, setToDelete] = useState<Color | null>(null);
+  const [selected, setSelected] = useState<ShippingCarrier | null>(null);
+  const [toDelete, setToDelete] = useState<ShippingCarrier | null>(null);
 
   useEffect(() => {
     if (searchParams.get("action") === "new") {
@@ -61,30 +54,39 @@ export default function ColorsPage() {
       setDialogOpen(true);
     }
   }, [searchParams]);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
 
-  // ─── Queries ────────────────────────────────────────────────────────────────
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedSearch(searchTerm);
+    }, 300);
+    return () => clearTimeout(handler);
+  }, [searchTerm]);
 
-  const { data: colors = [], isLoading, isFetching, refetch } = useColors();
-  const createMutation = useCreateColor();
-  const updateMutation = useUpdateColor();
-  const deleteMutation = useDeleteColor();
+  const { data, isLoading, isFetching, refetch } = useShippingCarriers(debouncedSearch);
+  const carriers: ShippingCarrier[] = Array.isArray(data) ? data : (data as any)?.data || [];
 
-  const handleSubmit = (data: Omit<Color, "id">) => {
+  const createMutation = useCreateShippingCarrier();
+  const updateMutation = useUpdateShippingCarrier();
+  const deleteMutation = useDeleteShippingCarrier();
+
+  const handleSubmit = (formData: any) => {
     if (selected) {
-      updateMutation.mutate({ id: selected.id, ...data } as UpdateColorDto, {
+      updateMutation.mutate(formData, {
         onSuccess: () => {
-          toast.success("Renk güncellendi.");
+          toast.success("Kargo firması güncellendi.");
           setDialogOpen(false);
         },
-        onError: () => toast.error("Renk güncellenirken hata oluştu.")
+        onError: () => toast.error("Kargo firması güncellenirken hata oluştu."),
       });
     } else {
-      createMutation.mutate(data as CreateColorDto, {
+      createMutation.mutate(formData, {
         onSuccess: () => {
-          toast.success("Renk başarıyla eklendi.");
+          toast.success("Kargo firması başarıyla eklendi.");
           setDialogOpen(false);
         },
-        onError: () => toast.error("Renk eklenirken hata oluştu.")
+        onError: () => toast.error("Kargo firması eklenirken hata oluştu."),
       });
     }
   };
@@ -92,38 +94,60 @@ export default function ColorsPage() {
   const handleDelete = (id: number) => {
     deleteMutation.mutate(id, {
       onSuccess: () => {
-        toast.success("Renk silindi.");
+        toast.success("Kargo firması silindi.");
         setToDelete(null);
       },
       onError: () => {
-        toast.error("Renk silinirken hata oluştu.");
+        toast.error("Kargo firması silinirken hata oluştu.");
         setToDelete(null);
-      }
+      },
     });
   };
 
   const isPending = createMutation.isPending || updateMutation.isPending;
 
-  // ─── Columns ─────────────────────────────────────────────────────────────────
-
-  const columns: ColumnDef<Color>[] = [
+  const columns: ColumnDef<ShippingCarrier>[] = [
     {
-      accessorKey: "hexCode",
-      header: "Renk",
+      accessorKey: "name",
+      header: "Firma Adı",
       cell: ({ row }) => (
         <div className="flex items-center gap-2">
-          <div
-            className="w-7 h-7 rounded-full border border-border shadow-sm"
-            style={{ backgroundColor: row.original.hexCode }}
-          />
-          <span className="text-xs text-muted-foreground font-mono">
-            {row.original.hexCode}
-          </span>
+          <div className="h-8 w-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center font-bold">
+            <Truck className="h-4 w-4" />
+          </div>
+          <div>
+            <div className="font-semibold text-sm">{row.original.name}</div>
+            <div className="text-xs text-muted-foreground">ID: #{row.original.id}</div>
+          </div>
         </div>
       ),
-      enableSorting: false,
     },
-    { accessorKey: "name", header: "Renk Adı" },
+    {
+      accessorKey: "basePrice",
+      header: "Standart Kargo Ücreti",
+      cell: ({ row }) => {
+        const price = row.original.basePrice;
+        return (
+          <span className="font-mono font-medium text-sm">
+            {price !== undefined && price > 0 ? `₺${price.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}` : "Ücretsiz"}
+          </span>
+        );
+      },
+    },
+    {
+      accessorKey: "trackingUrlTemplate",
+      header: "Takip URL Şablonu",
+      cell: ({ row }) => {
+        const template = row.original.trackingUrlTemplate;
+        return template ? (
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-mono truncate max-w-sm">
+            <span className="truncate">{template}</span>
+          </div>
+        ) : (
+          <span className="text-xs text-muted-foreground">Şablon tanımlanmamış</span>
+        );
+      },
+    },
     {
       id: "actions",
       header: "İşlemler",
@@ -135,7 +159,10 @@ export default function ColorsPage() {
             <Button
               variant="ghost"
               size="icon"
-              onClick={() => { setSelected(item); setDialogOpen(true); }}
+              onClick={() => {
+                setSelected(item);
+                setDialogOpen(true);
+              }}
               title="Düzenle"
             >
               <Edit className="h-4 w-4 text-primary" />
@@ -155,8 +182,6 @@ export default function ColorsPage() {
     },
   ];
 
-  // ─── Render ──────────────────────────────────────────────────────────────────
-
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -167,13 +192,13 @@ export default function ColorsPage() {
             </BreadcrumbItem>
             <BreadcrumbSeparator />
             <BreadcrumbItem>
-              <BreadcrumbPage>Renkler</BreadcrumbPage>
+              <BreadcrumbPage>Kargo Firmaları</BreadcrumbPage>
             </BreadcrumbItem>
           </BreadcrumbList>
         </Breadcrumb>
         {role !== "VIEWER" && (
           <Button onClick={() => { setSelected(null); setDialogOpen(true); }}>
-            <Plus className="mr-2 h-4 w-4" /> Renk Ekle
+            <Plus className="mr-2 h-4 w-4" /> Firma Ekle
           </Button>
         )}
       </div>
@@ -181,23 +206,24 @@ export default function ColorsPage() {
       {isLoading ? (
         <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
           <Spinner size="lg" className="mb-4" />
-          <p>Renkler yükleniyor...</p>
+          <p>Kargo firmaları yükleniyor...</p>
         </div>
       ) : (
         <DataTable
           columns={columns}
-          data={colors}
+          data={carriers}
+          showSearch={true}
+          searchPlaceholder="Kargo Firması Ara..."
+          searchValue={searchTerm}
+          onSearchChange={setSearchTerm}
           onRefresh={() => refetch()}
           isRefreshing={isFetching}
         />
       )}
 
-      <GenericCrudDialog
+      <ShippingCarrierDialog
         open={dialogOpen}
         onOpenChange={setDialogOpen}
-        title={selected ? "Rengi Düzenle" : "Yeni Renk Ekle"}
-        description={selected ? "Renk bilgilerini güncelleyin." : "Sisteme yeni bir renk ekleyin."}
-        fields={FIELDS}
         initialData={selected}
         isPending={isPending}
         onSubmit={handleSubmit}
@@ -211,21 +237,29 @@ export default function ColorsPage() {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Bu rengi silmek istediğinize emin misiniz?</AlertDialogTitle>
+            <AlertDialogTitle>Kargo firmasını silmek istediğinize emin misiniz?</AlertDialogTitle>
             <AlertDialogDescription>
-              &quot;{toDelete?.name}&quot; rengi kalıcı olarak silinecek. Bu işlem geri alınamaz.
+              &quot;{toDelete?.name}&quot; firması sistemden kalıcı olarak silinecektir.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={deleteMutation.isPending}>İptal</AlertDialogCancel>
             <AlertDialogAction
-              onClick={(e) => { e.preventDefault(); if (toDelete) handleDelete(toDelete.id); }}
+              onClick={(e) => {
+                e.preventDefault();
+                if (toDelete) handleDelete(toDelete.id);
+              }}
               disabled={deleteMutation.isPending}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               {deleteMutation.isPending ? (
-                <><Spinner size="sm" className="mr-2" />Siliniyor...</>
-              ) : "Evet, Sil"}
+                <>
+                  <Spinner size="sm" className="mr-2" />
+                  Siliniyor...
+                </>
+              ) : (
+                "Evet, Sil"
+              )}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

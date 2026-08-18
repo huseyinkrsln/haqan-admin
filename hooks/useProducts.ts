@@ -16,19 +16,46 @@ interface UseProductsParams {
   take?: number;
   orderBy?: string;
   isAscending?: boolean;
+  search?: string;
+  categoryId?: number;
+  brandId?: number;
+  isFeatured?: boolean;
+  isNewArrival?: boolean;
 }
 
 // ─── Liste ────────────────────────────────────────────────────────────────────
 
 export function useProducts(params: UseProductsParams = {}) {
-  const { page = 1, take = 10, orderBy = "Id", isAscending = true } = params;
+  const {
+    page = 1,
+    take = 10,
+    orderBy = "Id",
+    isAscending = false,
+    search,
+    categoryId,
+    brandId,
+    isFeatured,
+    isNewArrival,
+  } = params;
 
   return useQuery<PaginatedResult<Product[]>>({
-    queryKey: ["products", page, take, orderBy, isAscending],
+    queryKey: ["products", page, take, orderBy, isAscending, search, categoryId, brandId, isFeatured, isNewArrival],
     queryFn: async () => {
       const res = await axiosInstance.get<PaginatedResult<Product[]>>(
         "/api/products/getall",
-        { params: { page, take, orderBy, isAscending } }
+        {
+          params: {
+            page,
+            take,
+            orderBy,
+            isAscending,
+            search: search?.trim() || undefined,
+            categoryId,
+            brandId,
+            isFeatured,
+            isNewArrival,
+          },
+        }
       );
       return res.data;
     },

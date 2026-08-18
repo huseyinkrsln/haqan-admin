@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { ColumnDef } from "@tanstack/react-table";
 import Link from "next/link";
@@ -43,10 +44,18 @@ export default function SizesPage() {
   const queryClient = useQueryClient();
   const { data: session } = useSession();
   const role = (session?.user as any)?.role;
+  const searchParams = useSearchParams();
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selected, setSelected] = useState<Size | null>(null);
   const [toDelete, setToDelete] = useState<Size | null>(null);
+
+  useEffect(() => {
+    if (searchParams.get("action") === "new") {
+      setSelected(null);
+      setDialogOpen(true);
+    }
+  }, [searchParams]);
 
   const { data: sizes = [], isLoading, isFetching, refetch } = useSizes();
   const createMutation = useCreateSize();

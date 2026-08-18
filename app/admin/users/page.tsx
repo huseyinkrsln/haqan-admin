@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { DataTable } from "@/components/ui/data-table";
 import { ColumnDef } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
@@ -14,29 +15,53 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import { Plus, Edit2, Trash2 } from "lucide-react";
-import { GenericCrudDialog } from "@/components/admin/generic-crud-dialog";
+import { Plus, Edit2, Trash2, User as UserIcon, Mail, Phone } from "lucide-react";
+import { UserDialog } from "@/components/admin/user-dialog";
 import { useUsers, User } from "@/hooks/useUsers";
 
-const FIELDS = [
-  { key: "FullName", label: "Ad Soyad", placeholder: "Ahmet Yılmaz", required: true },
-  { key: "Email", label: "E-posta", placeholder: "ahmet@ornek.com", required: true },
-  { key: "MobilePhones", label: "Telefon", placeholder: "05xx xxx xx xx", required: false },
-  // Şifre sadece oluştururken gösterilmeli
-];
-
 export default function UsersPage() {
-  const { query, createMutation, updateMutation, deleteMutation } = useUsers();
-  const { data: users, isLoading, isFetching, refetch } = query;
-
+  const searchParams = useSearchParams();
+  const [searchTerm, setSearchTerm] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [page, setPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(10);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [toDelete, setToDelete] = useState<User | null>(null);
 
-  // Oluştururken şifre alanı ekle, düzenlerken çıkarma
-  const currentFields = selectedUser
-    ? FIELDS
-    : [...FIELDS, { key: "password", label: "Şifre", placeholder: "••••••", required: true }];
+  useEffect(() => {
+    if (searchParams.get("action") === "new") {
+      setSelectedUser(null);
+      setDialogOpen(true);
+    }
+  }, [searchParams]);
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedSearch(searchTerm);
+      setPage(1);
+    }, 300);
+    return () => clearTimeout(handler);
+  }, [searchTerm]);
+
+  const { query, createMutation, updateMutation, deleteMutation } = useUsers(page, pageSize, debouncedSearch);
+  const { data: rawData, isLoading, isFetching, refetch } = query;
+  const users: User[] = Array.isArray(rawData) ? rawData : (rawData as any)?.data || [];
+  const totalRecords: number = Array.isArray(rawData)
+    ? rawData.length
+    : ((rawData as any)?.totalRecords ?? (rawData as any)?.TotalRecords ?? users.length);
+  const totalPages: number = (rawData as any)?.totalPages ?? Math.max(1, Math.ceil(totalRecords / pageSize));
 
   const handleCreate = () => {
     setSelectedUser(null);
@@ -49,19 +74,16 @@ export default function UsersPage() {
   };
 
   const handleDelete = (id: number) => {
-    if (confirm("Kullanıcıyı silmek istediğinize emin misiniz?")) {
-      deleteMutation.mutate(id);
-    }
+    deleteMutation.mutate(id, {
+      onSuccess: () => setToDelete(null),
+    });
   };
 
   const onSubmit = (formData: any) => {
     if (selectedUser) {
-      updateMutation.mutate(
-        { ...selectedUser, ...formData },
-        {
-          onSuccess: () => setDialogOpen(false),
-        }
-      );
+      updateMutation.mutate(formData, {
+        onSuccess: () => setDialogOpen(false),
+      });
     } else {
       createMutation.mutate(formData, {
         onSuccess: () => setDialogOpen(false),
@@ -69,24 +91,63 @@ export default function UsersPage() {
     }
   };
 
+  const isPending = createMutation.isPending || updateMutation.isPending;
+
   const columns: ColumnDef<User>[] = [
     {
-      accessorKey: "FullName",
+      id: "fullName",
       header: "Ad Soyad",
-    },
-    {
-      accessorKey: "Email",
-      header: "E-posta",
-    },
-    {
-      accessorKey: "MobilePhones",
-      header: "Telefon",
-    },
-    {
-      accessorKey: "Status",
-      header: "Durum",
+      accessorFn: (row) => row.fullName || row.FullName || "",
       cell: ({ row }) => {
-        const status = row.getValue("Status") as boolean;
+        const name = row.original.fullName || row.original.FullName || "İsimsiz Kullanıcı";
+        const uid = row.original.userId ?? row.original.UserId ?? row.original.id;
+        return (
+          <div className="flex items-center gap-2.5">
+            <div className="h-8 w-8 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-xs">
+              <UserIcon className="h-4 w-4" />
+            </div>
+            <div>
+              <div className="font-semibold text-sm">{name}</div>
+              <div className="text-xs text-muted-foreground">ID: #{uid}</div>
+            </div>
+          </div>
+        );
+      },
+    },
+    {
+      id: "email",
+      header: "E-posta",
+      accessorFn: (row) => row.email || row.Email || "",
+      cell: ({ row }) => {
+        const email = row.original.email || row.original.Email;
+        return (
+          <div className="flex items-center gap-1.5 text-sm">
+            <Mail className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+            <span>{email || "-"}</span>
+          </div>
+        );
+      },
+    },
+    {
+      id: "mobilePhones",
+      header: "Telefon",
+      accessorFn: (row) => row.mobilePhones || row.MobilePhones || "",
+      cell: ({ row }) => {
+        const phone = row.original.mobilePhones || row.original.MobilePhones;
+        return (
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Phone className="h-3 w-3 shrink-0" />
+            <span>{phone || "-"}</span>
+          </div>
+        );
+      },
+    },
+    {
+      id: "status",
+      header: "Durum",
+      accessorFn: (row) => (row.status !== undefined ? row.status : row.Status),
+      cell: ({ row }) => {
+        const status = row.original.status !== undefined ? row.original.status : row.original.Status;
         return (
           <Badge variant={status ? "default" : "destructive"}>
             {status ? "Aktif" : "Pasif"}
@@ -100,23 +161,21 @@ export default function UsersPage() {
       cell: ({ row }) => {
         const user = row.original;
         return (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 justify-end">
             <Button
-              variant="outline"
+              variant="ghost"
               size="icon"
               onClick={() => handleEdit(user)}
-              className="h-8 w-8"
               title="Düzenle"
             >
-              <Edit2 className="h-4 w-4" />
+              <Edit2 className="h-4 w-4 text-primary" />
             </Button>
             <Button
-              variant="destructive"
+              variant="ghost"
               size="icon"
-              onClick={() => handleDelete(user.UserId)}
-              className="h-8 w-8"
+              className="text-destructive hover:text-destructive hover:bg-destructive/10"
+              onClick={() => setToDelete(user)}
               title="Sil"
-              disabled={deleteMutation.isPending}
             >
               <Trash2 className="h-4 w-4" />
             </Button>
@@ -156,21 +215,67 @@ export default function UsersPage() {
       ) : (
         <DataTable 
           columns={columns} 
-          data={users || []} 
+          data={users} 
+          showSearch={true}
+          searchPlaceholder="Ad Soyad, E-posta veya Telefon Ara..."
+          searchValue={searchTerm}
+          onSearchChange={setSearchTerm}
+          totalRecords={totalRecords}
+          totalLabel="kullanıcı"
+          page={page}
+          pageSize={pageSize}
+          pageCount={totalPages}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
           onRefresh={() => refetch()} 
           isRefreshing={isFetching}
         />
       )}
 
-      <GenericCrudDialog<User>
+      <UserDialog
         open={dialogOpen}
         onOpenChange={setDialogOpen}
-        title={selectedUser ? "Kullanıcı Düzenle" : "Yeni Kullanıcı Ekle"}
-        fields={currentFields}
         initialData={selectedUser}
-        isPending={createMutation.isPending || updateMutation.isPending}
+        isPending={isPending}
         onSubmit={onSubmit}
       />
+
+      <AlertDialog
+        open={!!toDelete}
+        onOpenChange={(open) => {
+          if (!deleteMutation.isPending && !open) setToDelete(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Kullanıcıyı silmek istediğinize emin misiniz?</AlertDialogTitle>
+            <AlertDialogDescription>
+              &quot;{toDelete?.fullName || toDelete?.FullName || toDelete?.email}&quot; kullanıcısı kalıcı olarak silinecektir.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteMutation.isPending}>İptal</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                const uid = toDelete?.userId ?? toDelete?.UserId ?? toDelete?.id;
+                if (uid) handleDelete(uid);
+              }}
+              disabled={deleteMutation.isPending}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleteMutation.isPending ? (
+                <>
+                  <Spinner size="sm" className="mr-2" />
+                  Siliniyor...
+                </>
+              ) : (
+                "Evet, Sil"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
