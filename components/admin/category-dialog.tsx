@@ -14,12 +14,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/ui/spinner";
 import { Category, CreateCategoryDto, UpdateCategoryDto } from "@/types/api.types";
+import { useRootCategoryLookup } from "@/hooks/useCategories";
 
 interface CategoryDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   initialData?: Category | null;
-  categories: Category[];
+  categories?: Category[];
   isPending?: boolean;
   onSubmit: (data: any) => void;
 }
@@ -36,7 +37,6 @@ export function CategoryDialog({
   open,
   onOpenChange,
   initialData,
-  categories,
   isPending,
   onSubmit,
 }: CategoryDialogProps) {
@@ -46,6 +46,9 @@ export function CategoryDialog({
   const [description, setDescription] = useState("");
   const [image1, setImage1] = useState<File | null>(null);
   const [image2, setImage2] = useState<File | null>(null);
+
+  // Backend'den doğrudan "ParentCategoryId IS NULL" filtrelenmiş kök kategorileri çekiyoruz
+  const { data: rootCategories } = useRootCategoryLookup();
 
   const firstInputRef = useRef<HTMLInputElement>(null);
 
@@ -79,7 +82,7 @@ export function CategoryDialog({
 
   return (
     <Dialog open={open} onOpenChange={isPending ? undefined : onOpenChange}>
-      <DialogContent className="sm:max-w-[420px]">
+      <DialogContent className="sm:max-w-[480px]">
         <DialogHeader>
           <DialogTitle>{initialData ? "Kategoriyi Düzenle" : "Yeni Kategori Ekle"}</DialogTitle>
           <DialogDescription>
@@ -124,10 +127,12 @@ export function CategoryDialog({
               disabled={isPending}
             >
               <option value="">Ana Kategori (Yok)</option>
-              {categories
-                .filter((c) => c.id !== initialData?.id)
+              {rootCategories
+                ?.filter((c) => !initialData?.id || c.id !== initialData.id)
                 .map((c) => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
                 ))}
             </select>
           </div>

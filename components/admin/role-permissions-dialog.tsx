@@ -145,12 +145,12 @@ export function RolePermissionsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
+      <DialogContent className="max-w-5xl sm:max-w-5xl max-h-[88vh] flex flex-col">
         <DialogHeader>
           <div className="flex items-center justify-between pr-6">
             <DialogTitle className="flex items-center gap-2 text-lg">
               <Key className="h-5 w-5 text-amber-500" />
-              Rol İzinleri & Yetkilendirme: <Badge variant="secondary" className="font-bold text-sm px-2 py-0.5">{roleName}</Badge>
+              Rol İzinleri & Yetkilendirme: <Badge variant="secondary" className="font-bold text-sm px-2.5 py-0.5">{roleName}</Badge>
             </DialogTitle>
           </div>
           <DialogDescription>
@@ -159,26 +159,26 @@ export function RolePermissionsDialog({
         </DialogHeader>
 
         {/* Toolbar: Arama ve Hızlı Seçim */}
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 py-2 border-b">
-          <div className="relative w-full sm:w-80">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 py-2.5 border-b">
+          <div className="relative flex-1 min-w-[240px]">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="İzin veya Yetki Ara..."
+              placeholder="İzin veya Yetki Ara (örn: Product, Order, User)..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-8 h-9 text-sm"
+              className="pl-8 h-9 text-sm w-full"
             />
           </div>
 
-          <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end">
-            <span className="text-xs font-semibold text-muted-foreground mr-2">
-              Seçili: <strong>{selectedIds.size}</strong> / {allClaims?.length || 0}
-            </span>
+          <div className="flex items-center gap-2 shrink-0">
+            <Badge variant="outline" className="text-xs px-2.5 py-1 font-mono whitespace-nowrap bg-muted/40 text-foreground">
+              Seçili: <strong className="text-primary ml-1 mr-0.5">{selectedIds.size}</strong> / {allClaims?.length || 0}
+            </Badge>
             <Button
               variant="outline"
               size="sm"
               onClick={handleSelectAllFiltered}
-              className="h-8 text-xs gap-1"
+              className="h-8 text-xs gap-1.5 whitespace-nowrap"
               type="button"
             >
               <CheckSquare className="h-3.5 w-3.5" /> Tümünü Seç
@@ -187,7 +187,7 @@ export function RolePermissionsDialog({
               variant="outline"
               size="sm"
               onClick={handleDeselectAllFiltered}
-              className="h-8 text-xs gap-1 text-muted-foreground"
+              className="h-8 text-xs gap-1.5 whitespace-nowrap text-muted-foreground hover:text-destructive hover:border-destructive/30"
               type="button"
             >
               <Square className="h-3.5 w-3.5" /> Temizle
@@ -196,7 +196,7 @@ export function RolePermissionsDialog({
         </div>
 
         {/* İzinler Listesi */}
-        <div className="flex-1 overflow-y-auto pr-1 py-3 space-y-6">
+        <div className="flex-1 overflow-y-auto pr-1 py-3 space-y-5">
           {isLoading ? (
             <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
               <Spinner size="lg" className="mb-3" />
@@ -216,7 +216,7 @@ export function RolePermissionsDialog({
                   <div className="flex items-center justify-between border-b pb-2">
                     <div className="flex items-center gap-2">
                       <span className="font-semibold text-sm">{category}</span>
-                      <Badge variant="outline" className="text-[11px] font-normal py-0 px-1.5">
+                      <Badge variant="outline" className="text-[11px] font-mono py-0 px-1.5">
                         {categorySelectedCount}/{claims.length}
                       </Badge>
                     </div>
@@ -240,16 +240,16 @@ export function RolePermissionsDialog({
                     </Button>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
                     {claims.map((claim) => {
                       const isChecked = selectedIds.has(claim.id);
                       return (
                         <div
                           key={claim.id}
                           onClick={() => toggleClaim(claim.id)}
-                          className={`flex items-start gap-2.5 p-2.5 rounded-md border cursor-pointer transition-all select-none ${
+                          className={`flex items-start gap-2.5 p-2 rounded-md border cursor-pointer transition-all select-none ${
                             isChecked
-                              ? "bg-primary/10 border-primary/40 text-foreground"
+                              ? "bg-primary/10 border-primary/40 text-foreground shadow-2xs"
                               : "bg-muted/20 border-border/70 hover:bg-muted/50 text-muted-foreground"
                           }`}
                         >
@@ -263,11 +263,11 @@ export function RolePermissionsDialog({
                             {isChecked && <Check className="h-3 w-3 stroke-[3]" />}
                           </div>
                           <div className="flex-1 min-w-0">
-                            <div className="font-medium text-xs truncate text-foreground">
+                            <div className="font-medium text-xs truncate text-foreground" title={claim.name}>
                               {claim.name || `İzin #${claim.id}`}
                             </div>
                             {(claim.alias || claim.description) && (
-                              <div className="text-[11px] text-muted-foreground truncate">
+                              <div className="text-[11px] text-muted-foreground truncate" title={claim.alias || claim.description}>
                                 {claim.alias || claim.description}
                               </div>
                             )}

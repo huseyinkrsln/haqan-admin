@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { axiosInstance } from "@/lib/axios";
 import { toast } from "sonner";
-import { PaginatedResult } from "@/types/api.types";
+import { PaginatedResult, SelectionItem } from "@/types/api.types";
 
 export interface User {
   id?: number;
@@ -15,6 +15,8 @@ export interface User {
   MobilePhones?: string;
   status?: boolean;
   Status?: boolean;
+  userGroups?: SelectionItem[];
+  UserGroups?: SelectionItem[];
 }
 
 export type UserDto = User;
@@ -98,4 +100,75 @@ export function useUsers(page: number = 1, take: number = 10, search?: string) {
     updateMutation,
     deleteMutation,
   };
+}
+
+export function useUserGroups(userId?: number) {
+  return useQuery<SelectionItem[]>({
+    queryKey: ["user-groups", userId],
+    queryFn: async () => {
+      if (!userId) return [];
+      const res = await axiosInstance.get(`/api/v1/user-groups/users/${userId}/groups`);
+      const data = Array.isArray(res.data) ? res.data : (res.data as any)?.data || [];
+      return data;
+    },
+    enabled: !!userId,
+  });
+}
+
+export function useUpdateUserGroups() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ userId, groupIds }: { userId: number; groupIds: number[] }) => {
+      const res = await axiosInstance.put("/api/v1/user-groups", {
+        id: 0,
+        userId,
+        groupId: groupIds,
+      });
+      return res.data;
+    },
+    onSuccess: (_, vars) => {
+      queryClient.invalidateQueries({ queryKey: ["user-groups", vars.userId] });
+      queryClient.invalidateQueries({ queryKey: ["users"] });
+      toast.success("Kullanıcı rolleri başarıyla güncellendi.");
+    },
+    onError: (err: any) => {
+      const msg = err.response?.data?.Message || err.response?.data?.message || err.response?.data || "Roller güncellenirken hata oluştu.";
+      toast.error(typeof msg === "string" ? msg : JSON.stringify(msg));
+    },
+  });
+}
+export function useUserDetail(userId?: number) {
+  return useQuery<User>({
+    queryKey: ["user-detail", userId],
+    queryFn: async () => {
+      if (!userId) return {} as User;
+      const res = await axiosInstance.get(`/api/v1/users/${userId}`);
+      const data = res.data?.data || res.data;
+      return data;
+    },
+    enabled: !!userId,
+  });
+}
+
+export function useChangePassword() {
+  return useMutation({
+    mutationFn: async ({ userId, password }: { userId: number; password: string }) => {
+      const res = await axiosInstance.put("/api/v1/auth/user-password", {
+        userId,
+        password,
+      });
+      return res.data;
+    },
+    onSuccess: () => {
+      toast.success("Şifreniz başarıyla güncellendi.");
+    },
+    onError: (err: any) => {
+      const msg =
+        err.response?.data?.Message ||
+        err.response?.data?.message ||
+        err.response?.data ||
+        "Şifre değiştirilirken bir hata oluştu.";
+      toast.error(typeof msg === "string" ? msg : JSON.stringify(msg));
+    },
+  });
 }

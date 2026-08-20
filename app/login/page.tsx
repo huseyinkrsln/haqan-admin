@@ -31,7 +31,7 @@ export default function LoginPage() {
     setIsLoading(false);
 
     if (result?.error) {
-      toast.error("Giriş başarısız. Lütfen bilgilerinizi kontrol edin.");
+      toast.error(result.error !== "CredentialsSignin" ? result.error : "Giriş başarısız. Lütfen bilgilerinizi kontrol edin.");
     } else {
       toast.success("Başarıyla giriş yapıldı!");
       router.push("/admin/products");

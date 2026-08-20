@@ -14,6 +14,7 @@ export function useCarts(page: number = 1, take: number = 10, search?: string) {
       const res = await axiosInstance.get(url);
       return res.data;
     },
+    staleTime: 0,
   });
 }
 
@@ -27,6 +28,8 @@ export function useCartItems(cartId?: number) {
       return data;
     },
     enabled: !!cartId,
+    staleTime: 0,
+    refetchOnWindowFocus: true,
   });
 }
 
@@ -36,6 +39,7 @@ export function useDeleteCart() {
     mutationFn: (id: number) => axiosInstance.delete("/api/carts", { data: { id } }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["carts"] });
+      queryClient.invalidateQueries({ queryKey: ["cart-items"] });
       toast.success("Sepet silindi.");
     },
     onError: (err: any) => {

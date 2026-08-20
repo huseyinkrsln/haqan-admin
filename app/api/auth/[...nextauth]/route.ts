@@ -40,22 +40,71 @@ export const authOptions = {
             return null;
           }
 
-          const { Token, RefreshToken, Expiration, Claims } = result.Data;
+          const { Token, RefreshToken, Expiration, Claims, Roles } = result.Data;
 
-          // Eğer backend özel bir "role:ADMIN" göndermiyorsa varsayılan SUPER_ADMIN yapıyoruz
-          const roleClaim = (Claims as string[])?.find((c: string) => c.toLowerCase().startsWith("role:"));
-          const role = roleClaim ? roleClaim.split(":")[1] : "SUPER_ADMIN";
+          // Backend'den gelen gerçek rolleri (Groups) ve Claims listesini kontrol ediyoruz
+          const rolesList: string[] = Array.isArray(Roles)
+            ? Roles
+            : (Array.isArray(result.Data?.roles) ? result.Data.roles : []);
+
+          // Yalnızca ve kesinlikle SuperAdmin rolüne sahip kullanıcılar giriş yapabilir
+          const isSuperAdmin =
+            rolesList.some((r: string) => {
+              const clean = r.toLowerCase().replace(/[\s_-]/g, "");
+              return clean === "superadmin" || clean === "superadministrator";
+            }) ||
+            (Claims as string[])?.some((c: string) => {
+              const clean = c.toLowerCase().replace(/[\s_-]/g, "");
+              return (
+                clean === "superadmin" ||
+                clean === "role:superadmin" ||
+                clean === "role:super_admin"
+              );
+            });
+
+          if (!isSuperAdmin) {
+            console.warn(`Access Denied: User "${credentials.email}" does not have SuperAdmin role.`);
+            return null;
+          }
+
+          // JWT Token içinden kullanıcının gerçek Ad Soyad (FullName) ve ID bilgisini alıyoruz
+          let fullName = credentials.email;
+          let userId: number | undefined = undefined;
+
+          if (Token) {
+            try {
+              const base64Payload = Token.split(".")[1];
+              if (base64Payload) {
+                const decodedPayload = JSON.parse(
+                  Buffer.from(base64Payload, "base64").toString("utf-8")
+                );
+                fullName =
+                  decodedPayload["http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name"] ||
+                  decodedPayload["name"] ||
+                  credentials.email;
+                const idStr =
+                  decodedPayload["http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier"] ||
+                  decodedPayload["nameid"] ||
+                  decodedPayload["sub"];
+                if (idStr) userId = Number(idStr);
+              }
+            } catch (e) {
+              console.error("Token payload decode error:", e);
+            }
+          }
 
           return {
-            id: credentials.email,
+            id: userId ? String(userId) : credentials.email,
             email: credentials.email,
-            name: credentials.email,
-            role,
+            name: fullName,
+            fullName: fullName,
+            role: "SUPER_ADMIN",
+            roles: rolesList,
             accessToken: Token,
             refreshToken: RefreshToken,
             expiration: Expiration,
           };
-        } catch (error) {
+        } catch (error: any) {
           console.error("Auth Exception:", error);
           return null;
         }
@@ -66,7 +115,10 @@ export const authOptions = {
   callbacks: {
     async jwt({ token, user }: { token: any; user: any }) {
       if (user) {
+        token.name = user.name;
+        token.fullName = user.fullName;
         token.role = user.role;
+        token.roles = user.roles;
         token.accessToken = user.accessToken;
         token.refreshToken = user.refreshToken;
         token.expiration = user.expiration;
@@ -75,7 +127,10 @@ export const authOptions = {
     },
     async session({ session, token }: { session: any; token: any }) {
       if (session.user) {
+        (session.user as any).name = token.name || token.fullName;
+        (session.user as any).fullName = token.fullName || token.name;
         (session.user as any).role = token.role;
+        (session.user as any).roles = token.roles;
       }
       session.accessToken = token.accessToken;
       session.refreshToken = token.refreshToken;
@@ -86,12 +141,14 @@ export const authOptions = {
 
   pages: {
     signIn: "/login",
+    error: "/login",
   },
 
   session: {
     strategy: "jwt" as const,
     maxAge: 60 * 60 * 8, // 8 saat
   },
+  secret: process.env.NEXTAUTH_SECRET || "haqanwear-secret-key-12345",
 };
 
 const handler = NextAuth(authOptions);

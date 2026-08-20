@@ -19,6 +19,7 @@ import { useSizes } from "@/hooks/useSizes";
 import { useCategories } from "@/hooks/useCategories";
 import { useBrands } from "@/hooks/useBrands";
 import { useFeatures } from "@/hooks/useFeatures";
+import { useProductGroups } from "@/hooks/useProductGroups";
 import {
   CreateComplexProductDto,
   ProductVariantCreateDto,
@@ -28,6 +29,7 @@ import {
 } from "@/types/api.types";
 import { axiosInstance } from "@/lib/axios";
 import { toast } from "sonner";
+import { getMinioUrl } from "@/lib/utils";
 import {
   ChevronRight,
   ChevronLeft,
@@ -36,6 +38,25 @@ import {
   Trash2,
   Image as ImageIcon,
 } from "lucide-react";
+
+function formatCategoryBreadcrumb(category: any, allCategories: any[] = []): string {
+  if (!category) return "";
+  const name = category.name || category.Name || "";
+  const parentId = category.parentCategoryId ?? category.ParentCategoryId;
+
+  if (!parentId || Number(parentId) === 0) {
+    return name;
+  }
+
+  const parent = allCategories.find(
+    (c: any) => Number(c.id ?? c.Id) === Number(parentId)
+  );
+  if (parent) {
+    return `${formatCategoryBreadcrumb(parent, allCategories)} > ${name}`;
+  }
+
+  return name;
+}
 
 const STEPS = [
   { id: 1, label: "Temel Bilgiler" },
@@ -97,6 +118,7 @@ export function ProductWizardDialog({
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [categoryId, setCategoryId] = useState<number | "">("");
+  const [productGroupId, setProductGroupId] = useState<number | "">("");
   const [brandId, setBrandId] = useState<number | "">("");
   const [slug, setSlug] = useState("");
   const [displayOrder, setDisplayOrder] = useState(0);
@@ -121,12 +143,14 @@ export function ProductWizardDialog({
   const { data: colorData } = useColors();
   const { data: bData } = useBrands();
   const { data: fData } = useFeatures();
+  const { data: pgData, isLoading: isPgLoading } = useProductGroups(categoryId ? Number(categoryId) : undefined);
 
   const categoriesData = Array.isArray(cData) ? cData : (cData as any)?.data || [];
   const sizesData = Array.isArray(sData) ? sData : (sData as any)?.data || [];
   const colorsData = Array.isArray(colorData) ? colorData : (colorData as any)?.data || [];
   const brandsData = Array.isArray(bData) ? bData : (bData as any)?.data || [];
   const featuresData = Array.isArray(fData) ? fData : (fData as any)?.data || [];
+  const productGroupsData = Array.isArray(pgData) ? pgData : (pgData as any)?.data || [];
 
   // slug otomatik oluştur
   useEffect(() => {
@@ -194,7 +218,7 @@ export function ProductWizardDialog({
 
   const handleReset = () => {
     setStep(1);
-    setName(""); setDescription(""); setCategoryId(""); setBrandId(""); setSlug(""); setDisplayOrder(0);
+    setName(""); setDescription(""); setCategoryId(""); setProductGroupId(""); setBrandId(""); setSlug(""); setDisplayOrder(0);
     setBasePrice(""); setDiscountPrice("");
     setIsFeatured(false); setIsBestSeller(false); setIsNewArrival(false);
     setSelectedColorIds([]); setSizesByColor({});
@@ -233,6 +257,7 @@ export function ProductWizardDialog({
       const payload: CreateComplexProductDto = {
         name: name.trim(),
         categoryId: Number(categoryId),
+        productGroupId: productGroupId ? Number(productGroupId) : undefined,
         brandId: brandId ? Number(brandId) : undefined,
         description: description.trim(),
         basePrice: Number(basePrice) || 0,
@@ -347,8 +372,8 @@ export function ProductWizardDialog({
   };
 
   const canGoNext = () => {
-    if (step === 1) return name.trim() && categoryId && slug.trim();
-    if (step === 2) return basePrice;
+    if (step === 1) return Boolean(name.trim() && categoryId && slug.trim());
+    if (step === 2) return Boolean(basePrice);
     if (step === 3) return selectedColorIds.length > 0 && selectedColorIds.every((cId) => (sizesByColor[cId] || []).length > 0);
     return true;
   };
@@ -392,20 +417,61 @@ export function ProductWizardDialog({
               <Label htmlFor="p-desc">Açıklama</Label>
               <Textarea id="p-desc" value={description} onChange={(e) => setDescription(e.target.value)} rows={3} placeholder="Ürün hakkında kısa açıklama..." />
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div className="space-y-1.5">
                 <Label>Kategori *</Label>
                 <select
                   className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm"
                   value={categoryId}
-                  onChange={(e) => setCategoryId(Number(e.target.value))}
+                  onChange={(e) => {
+                    setCategoryId(e.target.value ? Number(e.target.value) : "");
+                    setProductGroupId("");
+                  }}
                 >
                   <option value="">Kategori seçin</option>
-                  {(categoriesData as any[]).map((c: any) => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
+                  {(categoriesData as any[])
+                    .map((c: any) => ({
+                      id: c.id ?? c.Id,
+                      label: formatCategoryBreadcrumb(c, categoriesData),
+                    }))
+                    .sort((a: any, b: any) => a.label.localeCompare(b.label, "tr"))
+                    .map((c: any) => (
+                      <option key={c.id} value={c.id}>
+                        {c.label}
+                      </option>
+                    ))}
                 </select>
               </div>
+
+              <div className="space-y-1.5">
+                <Label className="flex items-center justify-between">
+                  <span>Ürün Grubu (Opsiyonel)</span>
+                  {isPgLoading && <span className="text-[10px] text-muted-foreground">Yükleniyor...</span>}
+                </Label>
+                <select
+                  className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm font-medium"
+                  value={productGroupId}
+                  onChange={(e) => setProductGroupId(e.target.value ? Number(e.target.value) : "")}
+                  disabled={!categoryId || isPgLoading}
+                >
+                  <option value="">
+                    {!categoryId
+                      ? "Önce kategori seçin"
+                      : productGroupsData.length === 0
+                      ? "Bu kategoride grup yok"
+                      : "Ürün grubu seçin (isteğe bağlı)"}
+                  </option>
+                  {productGroupsData.map((pg: any) => {
+                    const pgName = pg.name || pg.Name || `Grup #${pg.id || pg.Id}`;
+                    return (
+                      <option key={pg.id || pg.Id} value={pg.id || pg.Id}>
+                        {pgName}
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+
               <div className="space-y-1.5">
                 <Label>Marka</Label>
                 <select

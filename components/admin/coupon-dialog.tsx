@@ -20,8 +20,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { Spinner } from "@/components/ui/spinner";
-import { TicketPercent } from "lucide-react";
+import { TicketPercent, Sparkles } from "lucide-react";
 
 interface CouponDialogProps {
   open: boolean;
@@ -44,6 +45,7 @@ export function CouponDialog({
   const [minOrderAmount, setMinOrderAmount] = useState<number>(0);
   const [startDate, setStartDate] = useState<string>("");
   const [endDate, setEndDate] = useState<string>("");
+  const [isShowcase, setIsShowcase] = useState<boolean>(false);
 
   useEffect(() => {
     if (initialData) {
@@ -53,6 +55,7 @@ export function CouponDialog({
       setMinOrderAmount(initialData.minOrderAmount || 0);
       setStartDate(initialData.startDate ? initialData.startDate.slice(0, 10) : "");
       setEndDate(initialData.endDate ? initialData.endDate.slice(0, 10) : "");
+      setIsShowcase(Boolean(initialData.isShowcase));
     } else {
       const today = new Date().toISOString().slice(0, 10);
       const nextMonth = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
@@ -62,6 +65,7 @@ export function CouponDialog({
       setMinOrderAmount(0);
       setStartDate(today);
       setEndDate(nextMonth);
+      setIsShowcase(false);
     }
   }, [initialData, open]);
 
@@ -74,6 +78,7 @@ export function CouponDialog({
       minOrderAmount: Number(minOrderAmount),
       startDate: new Date(startDate).toISOString(),
       endDate: new Date(endDate).toISOString(),
+      isShowcase,
     };
 
     if (initialData) {
@@ -175,6 +180,24 @@ export function CouponDialog({
                 required
               />
             </div>
+          </div>
+
+          {/* 🌟 Vitrinde / Alt Çubukta Göster Switch 🌟 */}
+          <div className="flex items-center justify-between p-3 rounded-xl border bg-muted/30">
+            <div className="space-y-0.5">
+              <Label htmlFor="isShowcase" className="text-sm font-semibold flex items-center gap-1.5 cursor-pointer">
+                <Sparkles className="h-4 w-4 text-amber-500" />
+                Vitrinde / Alt Çubukta Göster
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                Bu kupon mağazada ekranın altındaki sabit çubukta duyurulur.
+              </p>
+            </div>
+            <Switch
+              id="isShowcase"
+              checked={isShowcase}
+              onCheckedChange={setIsShowcase}
+            />
           </div>
 
           <DialogFooter className="pt-2">

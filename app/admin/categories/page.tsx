@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { ColumnDef } from "@tanstack/react-table";
 import Link from "next/link";
-import { Plus, Edit, Trash2 } from "lucide-react";
+import { Plus, Edit, Trash2, Layers } from "lucide-react";
 import { toast } from "sonner";
 import { useSession } from "next-auth/react";
 
@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Badge } from "@/components/ui/badge";
 import { CategoryDialog } from "@/components/admin/category-dialog";
+import { CategoryProductGroupsDialog } from "@/components/admin/category-product-groups-dialog";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -34,6 +35,7 @@ export default function CategoriesPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selected, setSelected] = useState<Category | null>(null);
   const [toDelete, setToDelete] = useState<Category | null>(null);
+  const [categoryForProductGroups, setCategoryForProductGroups] = useState<Category | null>(null);
 
   useEffect(() => {
     if (searchParams.get("action") === "new") {
@@ -118,8 +120,22 @@ export default function CategoriesPage() {
       cell: ({ row }) => {
         if (role === "VIEWER") return null;
         const item = row.original;
+        const isSubCategory = !!item.parentCategoryId;
+
         return (
-          <div className="flex items-center gap-2 justify-end">
+          <div className="flex items-center gap-1.5 justify-end">
+            {isSubCategory && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs gap-1.5 border-emerald-500/30 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 hover:border-emerald-500"
+                onClick={() => setCategoryForProductGroups(item)}
+                title="Bu alt kategoriye ait ürün gruplarını (alt grupları) yönet"
+              >
+                <Layers className="h-3.5 w-3.5 text-emerald-600" />
+                <span>Ürün Grupları</span>
+              </Button>
+            )}
             <Button variant="ghost" size="icon" onClick={() => { setSelected(item); setDialogOpen(true); }} title="Düzenle">
               <Edit className="h-4 w-4 text-primary" />
             </Button>
@@ -169,6 +185,13 @@ export default function CategoriesPage() {
         categories={categories}
         isPending={isPending}
         onSubmit={handleSubmit}
+      />
+
+      <CategoryProductGroupsDialog
+        open={!!categoryForProductGroups}
+        onOpenChange={(open) => { if (!open) setCategoryForProductGroups(null); }}
+        category={categoryForProductGroups}
+        parentCategoryName={categoryForProductGroups?.parentCategoryId ? categoryMap[categoryForProductGroups.parentCategoryId] : undefined}
       />
 
       <AlertDialog open={!!toDelete} onOpenChange={(open) => { if (!deleteMutation.isPending && !open) setToDelete(null); }}>

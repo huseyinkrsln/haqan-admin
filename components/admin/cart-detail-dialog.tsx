@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import { Cart, CartItem } from "@/types/api.types";
 import {
   Dialog,
@@ -10,8 +11,9 @@ import {
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Spinner } from "@/components/ui/spinner";
+import { Button } from "@/components/ui/button";
 import { useCartItems } from "@/hooks/useCarts";
-import { ShoppingCart, Clock, User as UserIcon, Package, ExternalLink } from "lucide-react";
+import { ShoppingCart, Clock, User as UserIcon, Package, ExternalLink, RefreshCw } from "lucide-react";
 import { getMinioUrl } from "@/lib/utils";
 import Link from "next/link";
 import Image from "next/image";
@@ -28,7 +30,14 @@ export function CartDetailDialog({
   cart,
 }: CartDetailDialogProps) {
   const cartId = cart?.id;
-  const { data: items, isLoading } = useCartItems(cartId);
+  const { data: items, isLoading, isFetching, refetch } = useCartItems(cartId);
+
+  // Dialog her açıldığında veritabanından en güncel kalemleri çek
+  useEffect(() => {
+    if (open && cartId) {
+      refetch();
+    }
+  }, [open, cartId, refetch]);
 
   if (!cart) return null;
 
@@ -43,10 +52,22 @@ export function CartDetailDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <ShoppingCart className="h-5 w-5 text-primary" />
-            Sepet Detayı #{cart.id}
-          </DialogTitle>
+          <div className="flex items-center justify-between pr-6">
+            <DialogTitle className="flex items-center gap-2">
+              <ShoppingCart className="h-5 w-5 text-primary" />
+              Sepet Detayı #{cart.id}
+            </DialogTitle>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => refetch()}
+              disabled={isFetching}
+              className="h-8 gap-1.5 text-xs"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${isFetching ? "animate-spin" : ""}`} />
+              Yenile
+            </Button>
+          </div>
           <DialogDescription>
             Kullanıcının sepetinde bekleyen ürünler, varyant özellikleri ve sepet tutarı.
           </DialogDescription>

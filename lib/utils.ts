@@ -14,3 +14,20 @@ export function getMinioUrl(path?: string | null): string {
   }
   return `${MINIO_URL}${path.startsWith("/") ? "" : "/"}${path}`;
 }
+
+export function getCategoryBreadcrumb(category: any, allCategories: any[] = []): string {
+  if (!category) return "";
+  const name = category.name || category.Name || "";
+  const parentId = category.parentCategoryId ?? category.ParentCategoryId;
+
+  if (!parentId || Number(parentId) === 0) {
+    return name;
+  }
+
+  const parent = allCategories.find((c: any) => Number(c.id ?? c.Id) === Number(parentId));
+  if (parent) {
+    return `${getCategoryBreadcrumb(parent, allCategories)} > ${name}`;
+  }
+
+  return name;
+}

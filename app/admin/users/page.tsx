@@ -26,8 +26,9 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import { Plus, Edit2, Trash2, User as UserIcon, Mail, Phone } from "lucide-react";
+import { Plus, Edit2, Trash2, User as UserIcon, Mail, Phone, ShieldCheck } from "lucide-react";
 import { UserDialog } from "@/components/admin/user-dialog";
+import { UserRolesDialog } from "@/components/admin/user-roles-dialog";
 import { useUsers, User } from "@/hooks/useUsers";
 
 export default function UsersPage() {
@@ -38,6 +39,7 @@ export default function UsersPage() {
   const [pageSize, setPageSize] = useState<number>(10);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [rolesUser, setRolesUser] = useState<User | null>(null);
   const [toDelete, setToDelete] = useState<User | null>(null);
 
   useEffect(() => {
@@ -143,6 +145,25 @@ export default function UsersPage() {
       },
     },
     {
+      id: "roles",
+      header: "Roller",
+      cell: ({ row }) => {
+        const groups = row.original.userGroups || row.original.UserGroups || [];
+        if (groups.length === 0) {
+          return <span className="text-xs text-muted-foreground italic">Rol Atanmamış</span>;
+        }
+        return (
+          <div className="flex flex-wrap gap-1 max-w-[200px]">
+            {groups.map((g) => (
+              <Badge key={g.id} variant="secondary" className="text-[11px] font-medium px-2 py-0.5">
+                {g.label}
+              </Badge>
+            ))}
+          </div>
+        );
+      },
+    },
+    {
       id: "status",
       header: "Durum",
       accessorFn: (row) => (row.status !== undefined ? row.status : row.Status),
@@ -162,6 +183,15 @@ export default function UsersPage() {
         const user = row.original;
         return (
           <div className="flex items-center gap-2 justify-end">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setRolesUser(user)}
+              className="gap-1.5 h-8 text-xs font-medium text-primary hover:text-primary hover:bg-primary/10 border-primary/30"
+              title="Kullanıcı Rollerini Yönet"
+            >
+              <ShieldCheck className="h-3.5 w-3.5" /> Rolleri Yönet
+            </Button>
             <Button
               variant="ghost"
               size="icon"
@@ -232,12 +262,22 @@ export default function UsersPage() {
         />
       )}
 
+      {/* Kullanıcı Ekleme / Düzenleme */}
       <UserDialog
         open={dialogOpen}
         onOpenChange={setDialogOpen}
         initialData={selectedUser}
         isPending={isPending}
         onSubmit={onSubmit}
+      />
+
+      {/* Kullanıcı Rolleri Yönetimi */}
+      <UserRolesDialog
+        open={!!rolesUser}
+        onOpenChange={(open) => {
+          if (!open) setRolesUser(null);
+        }}
+        user={rolesUser}
       />
 
       <AlertDialog

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { ColumnDef } from "@tanstack/react-table";
+import { useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { ShoppingCart, Eye, Trash2, Clock, User as UserIcon } from "lucide-react";
 import { useSession } from "next-auth/react";
@@ -52,7 +53,13 @@ export default function CartsPage() {
     return () => clearTimeout(handler);
   }, [searchTerm]);
 
+  const queryClient = useQueryClient();
   const { data, isLoading, isFetching, refetch } = useCarts(page, pageSize, debouncedSearch);
+
+  const handleRefresh = () => {
+    refetch();
+    queryClient.invalidateQueries({ queryKey: ["cart-items"] });
+  };
   const carts: Cart[] = Array.isArray(data) ? data : (data as any)?.data || [];
   const totalRecords: number = Array.isArray(data)
     ? data.length
@@ -211,7 +218,7 @@ export default function CartsPage() {
           pageCount={totalPages}
           onPageChange={setPage}
           onPageSizeChange={setPageSize}
-          onRefresh={() => refetch()}
+          onRefresh={handleRefresh}
           isRefreshing={isFetching}
         />
       )}

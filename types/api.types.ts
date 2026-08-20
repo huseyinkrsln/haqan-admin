@@ -307,6 +307,7 @@ export interface Coupon extends BaseEntity {
   minOrderAmount: number;
   startDate: string;
   endDate: string;
+  isShowcase?: boolean;
 }
 
 export interface CreateCouponDto {
@@ -316,6 +317,7 @@ export interface CreateCouponDto {
   minOrderAmount: number;
   startDate: string;
   endDate: string;
+  isShowcase?: boolean;
 }
 
 export interface UpdateCouponDto extends CreateCouponDto {
@@ -432,3 +434,36 @@ export interface GroupClaim extends BaseEntity {
   groupId: number;
   claimId: number;
 }
+
+export interface SelectionItem {
+  id: string | number;
+  label: string;
+  parentId?: string;
+  isDisabled?: boolean;
+}
+
+// ─── Product Groups (Ürün Grupları) ──────────────────────────────────────────
+
+export interface ProductGroup extends BaseEntity {
+  name: string;
+  slug: string;
+  description?: string;
+  imageUrl?: string;
+  categoryId?: number;
+  categoryName?: string;
+}
+
+export interface CreateProductGroupDto {
+  name: string;
+  slug: string;
+  description?: string;
+  categoryId?: number;
+  image?: File;
+  file?: File;
+}
+
+export interface UpdateProductGroupDto extends Partial<CreateProductGroupDto> {
+  id: number;
+  imageUrl?: string;
+}
+

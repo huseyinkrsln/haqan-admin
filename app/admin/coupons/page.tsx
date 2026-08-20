@@ -180,6 +180,20 @@ export default function CouponsPage() {
       },
     },
     {
+      accessorKey: "isShowcase",
+      header: "Vitrin Durumu",
+      cell: ({ row }) => {
+        const isShowcase = Boolean(row.original.isShowcase);
+        return isShowcase ? (
+          <Badge variant="default" className="bg-[#4A5D3E] hover:bg-[#3D4D33] text-white text-[11px] gap-1 shadow-xs">
+            🌟 Vitrinde Yayında
+          </Badge>
+        ) : (
+          <span className="text-xs text-muted-foreground">—</span>
+        );
+      },
+    },
+    {
       id: "actions",
       header: "İşlemler",
       cell: ({ row }) => {

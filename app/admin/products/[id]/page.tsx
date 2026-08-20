@@ -87,7 +87,27 @@ import { useCategories } from "@/hooks/useCategories";
 import { useBrands } from "@/hooks/useBrands";
 import { useColors } from "@/hooks/useColors";
 import { useSizes } from "@/hooks/useSizes";
+import { useProductGroups } from "@/hooks/useProductGroups";
 import { UpdateProductDto } from "@/types/api.types";
+
+function formatCategoryBreadcrumb(category: any, allCategories: any[] = []): string {
+  if (!category) return "";
+  const name = category.name || category.Name || "";
+  const parentId = category.parentCategoryId ?? category.ParentCategoryId;
+
+  if (!parentId || Number(parentId) === 0) {
+    return name;
+  }
+
+  const parent = allCategories.find(
+    (c: any) => Number(c.id ?? c.Id) === Number(parentId)
+  );
+  if (parent) {
+    return `${formatCategoryBreadcrumb(parent, allCategories)} > ${name}`;
+  }
+
+  return name;
+}
 
 const getImageUrl = (url: string) => {
   if (!url) return "/placeholder-image.jpg";
@@ -140,6 +160,11 @@ export default function ProductDetailPage() {
 
   // State
   const [formData, setFormData] = useState<UpdateProductDto | null>(null);
+
+  const { data: productGroupsData, isLoading: isProductGroupsLoading } = useProductGroups(
+    formData?.categoryId ? Number(formData.categoryId) : undefined
+  );
+  const productGroups = Array.isArray(productGroupsData) ? productGroupsData : (productGroupsData as any)?.data || [];
 
   // Varyantları inline düzenleme için state
   const [editingVariantId, setEditingVariantId] = useState<number | null>(null);
@@ -196,9 +221,22 @@ export default function ProductDetailPage() {
 
   const handleBaseSave = () => {
     if (!formData) return;
+
+    if (!formData.categoryId) {
+      toast.error("Kategori seçimi zorunludur.");
+      return;
+    }
+
     updateProductMutation.mutate(formData, {
       onSuccess: () => toast.success("Ürün bilgileri başarıyla güncellendi."),
-      onError: () => toast.error("Ürün güncellenirken bir hata oluştu.")
+      onError: (err: any) => {
+        const msg =
+          err.response?.data?.Message ||
+          err.response?.data?.message ||
+          (typeof err.response?.data === "string" ? err.response?.data : null) ||
+          "Ürün güncellenirken bir hata oluştu.";
+        toast.error(msg);
+      },
     });
   };
 
@@ -457,23 +495,87 @@ export default function ProductDetailPage() {
               </div>
               
               <div className="space-y-1.5">
-                <Label className="text-xs font-semibold text-slate-700">Kategori</Label>
+                <Label className="text-xs font-semibold text-slate-700">Kategori *</Label>
                 <Select
                   disabled={isViewer}
-                  value={String(formData.categoryId)}
-                  onValueChange={(val) => setFormData({ ...formData, categoryId: Number(val) })}
+                  value={formData.categoryId ? String(formData.categoryId) : ""}
+                  onValueChange={(val) =>
+                    setFormData({
+                      ...formData,
+                      categoryId: Number(val),
+                      productGroupId: undefined, // Kategori değiştiğinde grubu sıfırla
+                    })
+                  }
                 >
                   <SelectTrigger className="h-9 text-sm">
                     <SelectValue placeholder="Kategori Seçin">
-                      {categories?.find((c: any) => String(c.id) === String(formData.categoryId))?.name || "Kategori Seçin"}
+                      {formData.categoryId
+                        ? formatCategoryBreadcrumb(
+                            categories?.find((c: any) => String(c.id ?? c.Id) === String(formData.categoryId)),
+                            categories
+                          )
+                        : "Kategori Seçin *"}
                     </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
-                    {categories?.map((c: any) => (
-                      <SelectItem key={c.id} value={String(c.id)}>
-                        {c.name}
-                      </SelectItem>
-                    ))}
+                    {categories
+                      ?.map((c: any) => ({
+                        id: c.id ?? c.Id,
+                        label: formatCategoryBreadcrumb(c, categories),
+                      }))
+                      .sort((a: any, b: any) => a.label.localeCompare(b.label, "tr"))
+                      .map((c: any) => (
+                        <SelectItem key={c.id} value={String(c.id)}>
+                          {c.label}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold text-slate-700 flex items-center justify-between">
+                  <span>Ürün Grubu (Opsiyonel)</span>
+                  {isProductGroupsLoading && <span className="text-[10px] text-muted-foreground">Yükleniyor...</span>}
+                </Label>
+                <Select
+                  disabled={isViewer || !formData.categoryId || isProductGroupsLoading}
+                  value={formData.productGroupId ? String(formData.productGroupId) : "none"}
+                  onValueChange={(val) =>
+                    setFormData({
+                      ...formData,
+                      productGroupId: val === "none" ? undefined : Number(val),
+                    })
+                  }
+                >
+                  <SelectTrigger className="h-9 text-sm">
+                    <SelectValue
+                      placeholder={
+                        !formData.categoryId
+                          ? "Önce Kategori Seçin"
+                          : productGroups.length === 0
+                          ? "Bu kategoride grup yok"
+                          : "Ürün Grubu Seçin (Opsiyonel)"
+                      }
+                    >
+                      {formData.productGroupId
+                        ? productGroups?.find((pg: any) => String(pg.id ?? pg.Id) === String(formData.productGroupId))?.name ||
+                          productGroups?.find((pg: any) => String(pg.id ?? pg.Id) === String(formData.productGroupId))?.Name ||
+                          `Grup #${formData.productGroupId}`
+                        : "Grupsuz (Yok)"}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Grupsuz (Yok)</SelectItem>
+                    {productGroups.map((pg: any) => {
+                      const pgId = String(pg.id ?? pg.Id);
+                      const pgName = pg.name || pg.Name || `Grup #${pgId}`;
+                      return (
+                        <SelectItem key={pgId} value={pgId}>
+                          {pgName}
+                        </SelectItem>
+                      );
+                    })}
                   </SelectContent>
                 </Select>
               </div>
