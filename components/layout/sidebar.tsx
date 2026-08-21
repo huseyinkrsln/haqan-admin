@@ -15,7 +15,7 @@ import {
   Palette,
   Ruler,
   Tag,
-  Sparkles,
+  BadgeCheck,
   List,
   ShoppingBag,
   TicketPercent,
@@ -155,7 +155,7 @@ export function Sidebar() {
     {
       title: "Özellikler",
       href: "/admin/features",
-      icon: Sparkles,
+      icon: BadgeCheck,
       roles: ["SUPER_ADMIN", "EDITOR"],
       canAdd: true,
       addHref: "/admin/features?action=new",

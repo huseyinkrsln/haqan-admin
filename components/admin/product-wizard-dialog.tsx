@@ -221,6 +221,7 @@ export function ProductWizardDialog({
     setName(""); setDescription(""); setCategoryId(""); setProductGroupId(""); setBrandId(""); setSlug(""); setDisplayOrder(0);
     setBasePrice(""); setDiscountPrice("");
     setIsFeatured(false); setIsBestSeller(false); setIsNewArrival(false);
+    setFeatureIds([]);
     setSelectedColorIds([]); setSizesByColor({});
     setVariantRows([]); setImageRows([]);
   };
@@ -558,10 +559,17 @@ export function ProductWizardDialog({
                         else setFeatureIds((prev) => prev.filter((id) => id !== f.id));
                       }}
                     />
-                    <div className={`w-4 h-4 flex items-center justify-center border rounded-sm ${featureIds.includes(f.id) ? "bg-primary border-primary text-primary-foreground" : "border-input"}`}>
+                    <div className={`w-4 h-4 flex items-center justify-center border rounded-sm shrink-0 ${featureIds.includes(f.id) ? "bg-primary border-primary text-primary-foreground" : "border-input"}`}>
                       {featureIds.includes(f.id) && <Check className="w-3 h-3" />}
                     </div>
-                    {f.name}
+                    {f.icon && (
+                      <img
+                        src={getMinioUrl(f.icon)}
+                        alt={f.name}
+                        className="w-4 h-4 object-contain shrink-0"
+                      />
+                    )}
+                    <span className="truncate">{f.name}</span>
                   </label>
                 ))}
                 {featuresData.length === 0 && <p className="text-xs text-muted-foreground">Sistemde tanımlı özellik bulunamadı.</p>}

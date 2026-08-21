@@ -21,6 +21,7 @@ import {
   Upload,
   X,
   Sparkles,
+  BadgeCheck,
   TrendingUp,
   Clock,
   Layers,
@@ -88,6 +89,7 @@ import { useBrands } from "@/hooks/useBrands";
 import { useColors } from "@/hooks/useColors";
 import { useSizes } from "@/hooks/useSizes";
 import { useProductGroups } from "@/hooks/useProductGroups";
+import { useFeatures } from "@/hooks/useFeatures";
 import { UpdateProductDto } from "@/types/api.types";
 
 function formatCategoryBreadcrumb(category: any, allCategories: any[] = []): string {
@@ -144,11 +146,13 @@ export default function ProductDetailPage() {
   const { data: brandsData, isLoading: isBrandsLoading } = useBrands();
   const { data: globalColorsData } = useColors();
   const { data: globalSizesData } = useSizes();
+  const { data: allFeaturesData } = useFeatures();
 
   const categories = Array.isArray(categoriesData) ? categoriesData : (categoriesData as any)?.data || [];
   const brands = Array.isArray(brandsData) ? brandsData : (brandsData as any)?.data || [];
   const globalColors = Array.isArray(globalColorsData) ? globalColorsData : (globalColorsData as any)?.data || [];
   const globalSizes = Array.isArray(globalSizesData) ? globalSizesData : (globalSizesData as any)?.data || [];
+  const allFeatures = Array.isArray(allFeaturesData) ? allFeaturesData : (allFeaturesData as any)?.data || [];
 
   const updateProductMutation = useUpdateProduct();
   const updateProductVariantMutation = useUpdateProductVariant();
@@ -215,6 +219,7 @@ export default function ProductDetailPage() {
         isNewArrival: product.isNewArrival,
         displayOrder: product.displayOrder,
         slug: product.slug,
+        featureIds: (product as any).featureIds || (product as any).features?.map((f: any) => f.id) || [],
       });
     }
   }, [product]);
@@ -1351,6 +1356,81 @@ export default function ProductDetailPage() {
                 />
                 <p className="text-[10px] text-muted-foreground mt-1">Düşük sayılar listelerde daha önce görünür.</p>
               </div>
+            </div>
+          </div>
+
+          {/* 🌟 ÜRÜN ÖZELLİKLERİ (FEATURES) 🌟 */}
+          <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-xs space-y-4">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-lg bg-emerald-50 text-emerald-700">
+                  <BadgeCheck className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">Ürün Özellikleri</h3>
+                  <p className="text-[10px] text-muted-foreground">Kumaş, yıkama ve teknik detaylar</p>
+                </div>
+              </div>
+              <Badge variant="secondary" className="text-[10px] font-semibold">
+                {formData.featureIds?.length || 0} seçildi
+              </Badge>
+            </div>
+
+            <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+              {allFeatures.map((f: any) => {
+                const isSelected = formData.featureIds?.includes(f.id) || false;
+                return (
+                  <label
+                    key={f.id}
+                    className={`flex items-center justify-between p-2.5 rounded-xl border transition-all cursor-pointer ${
+                      isSelected
+                        ? "border-primary bg-primary/5 text-primary font-medium shadow-2xs"
+                        : "border-slate-200/70 hover:bg-slate-50/70 text-slate-700"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div
+                        className={`w-4 h-4 flex items-center justify-center border rounded-sm shrink-0 transition-colors ${
+                          isSelected
+                            ? "bg-primary border-primary text-primary-foreground"
+                            : "border-slate-300"
+                        }`}
+                      >
+                        {isSelected && <Check className="w-3 h-3" />}
+                      </div>
+                      {f.icon && (
+                        <div className="w-5 h-5 bg-white border border-slate-200/60 rounded p-0.5 flex items-center justify-center shrink-0">
+                          <img
+                            src={getImageUrl(f.icon)}
+                            alt={f.name}
+                            className="max-w-full max-h-full object-contain"
+                          />
+                        </div>
+                      )}
+                      <span className="text-xs truncate">{f.name}</span>
+                    </div>
+                    <input
+                      type="checkbox"
+                      className="hidden"
+                      checked={isSelected}
+                      disabled={isViewer}
+                      onChange={(e) => {
+                        const current = formData.featureIds || [];
+                        const next = e.target.checked
+                          ? [...current, f.id]
+                          : current.filter((id: number) => id !== f.id);
+                        setFormData({ ...formData, featureIds: next });
+                      }}
+                    />
+                  </label>
+                );
+              })}
+
+              {allFeatures.length === 0 && (
+                <div className="py-4 text-center text-xs text-muted-foreground">
+                  Tanımlı özellik bulunamadı.
+                </div>
+              )}
             </div>
           </div>
 

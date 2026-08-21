@@ -121,6 +121,8 @@ export interface Product {
   isNewArrival: boolean;
   displayOrder: number;
   slug: string;
+  features?: Feature[];
+  featureIds?: number[];
 }
 
 export interface UpdateProductDto {
@@ -139,6 +141,7 @@ export interface UpdateProductDto {
   isNewArrival: boolean;
   displayOrder: number;
   slug: string;
+  featureIds?: number[];
 }
 
 export interface ProductVariant {
