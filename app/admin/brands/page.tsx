@@ -23,6 +23,7 @@ import {
   Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList,
   BreadcrumbPage, BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
+import { getApiErrorMessage } from "@/lib/utils";
 
 const MINIO_URL = process.env.NEXT_PUBLIC_MINIO_URL || "http://127.0.0.1:9000";
 
@@ -65,7 +66,7 @@ export default function BrandsPage() {
           toast.success("Marka güncellendi.");
           setDialogOpen(false);
         },
-        onError: () => toast.error("Marka güncellenirken hata oluştu.")
+        onError: (err: any) => toast.error(getApiErrorMessage(err, "Marka güncellenirken hata oluştu."))
       });
     } else {
       createMutation.mutate(data, {
@@ -73,7 +74,7 @@ export default function BrandsPage() {
           toast.success("Marka başarıyla eklendi.");
           setDialogOpen(false);
         },
-        onError: () => toast.error("Marka eklenirken hata oluştu.")
+        onError: (err: any) => toast.error(getApiErrorMessage(err, "Marka eklenirken hata oluştu."))
       });
     }
   };
@@ -81,11 +82,11 @@ export default function BrandsPage() {
   const handleDelete = (id: number) => {
     deleteMutation.mutate(id, {
       onSuccess: () => {
-        toast.success("Marka silindi.");
+        toast.success("Marka başarıyla silindi.");
         setToDelete(null);
       },
-      onError: () => {
-        toast.error("Marka silinirken hata oluştu.");
+      onError: (err: any) => {
+        toast.error(getApiErrorMessage(err, "Marka silinirken hata oluştu."), { duration: 6000 });
         setToDelete(null);
       }
     });

@@ -161,8 +161,10 @@ export function CartDetailDialog({
                             </span>
                             {item.productId && (
                               <Link
-                                href={`/admin/products`}
-                                title="Ürünü İncele"
+                                href={`/admin/products/${item.productId}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                title="Ürünü Yeni Sekmede İncele"
                                 className="text-muted-foreground hover:text-primary shrink-0"
                               >
                                 <ExternalLink className="h-3.5 w-3.5" />

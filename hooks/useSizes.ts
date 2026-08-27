@@ -7,7 +7,8 @@ export function useSizes() {
     queryKey: ["sizes"],
     queryFn: async () => {
       const res = await axiosInstance.get<Size[]>("/api/sizes/getall");
-      return res.data;
+      const raw = res.data;
+      return Array.isArray(raw) ? raw : (raw as any)?.data || [];
     },
   });
 }
@@ -18,6 +19,7 @@ export function useCreateSize() {
     mutationFn: (dto: CreateSizeDto) => axiosInstance.post("/api/sizes", dto),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["sizes"] });
+      queryClient.invalidateQueries({ queryKey: ["size-groups"] });
     },
   });
 }
@@ -28,6 +30,7 @@ export function useUpdateSize() {
     mutationFn: (dto: UpdateSizeDto) => axiosInstance.put("/api/sizes", dto),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["sizes"] });
+      queryClient.invalidateQueries({ queryKey: ["size-groups"] });
     },
   });
 }
@@ -38,6 +41,7 @@ export function useDeleteSize() {
     mutationFn: (id: number) => axiosInstance.delete("/api/sizes", { data: { id } }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["sizes"] });
+      queryClient.invalidateQueries({ queryKey: ["size-groups"] });
     },
   });
 }

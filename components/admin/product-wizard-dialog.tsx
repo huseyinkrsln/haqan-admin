@@ -16,6 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { Spinner } from "@/components/ui/spinner";
 import { useColors } from "@/hooks/useColors";
 import { useSizes } from "@/hooks/useSizes";
+import { useSizeGroups } from "@/hooks/useSizeGroups";
 import { useCategories } from "@/hooks/useCategories";
 import { useBrands } from "@/hooks/useBrands";
 import { useFeatures } from "@/hooks/useFeatures";
@@ -26,6 +27,7 @@ import {
   ProductImageCreateDto,
   Color,
   Size,
+  SizeGroup,
 } from "@/types/api.types";
 import { axiosInstance } from "@/lib/axios";
 import { toast } from "sonner";
@@ -73,16 +75,6 @@ interface ProductWizardDialogProps {
   isPending?: boolean;
 }
 
-function slugify(text: string) {
-  return text
-    .toLowerCase()
-    .replace(/ğ/g, "g").replace(/ü/g, "u").replace(/ş/g, "s")
-    .replace(/ı/g, "i").replace(/ö/g, "o").replace(/ç/g, "c")
-    .replace(/[^a-z0-9\s-]/g, "")
-    .trim()
-    .replace(/\s+/g, "-");
-}
-
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 interface VariantRow {
@@ -120,7 +112,6 @@ export function ProductWizardDialog({
   const [categoryId, setCategoryId] = useState<number | "">("");
   const [productGroupId, setProductGroupId] = useState<number | "">("");
   const [brandId, setBrandId] = useState<number | "">("");
-  const [slug, setSlug] = useState("");
   const [displayOrder, setDisplayOrder] = useState(0);
   const [isUploadingImages, setIsUploadingImages] = useState(false);
 
@@ -140,6 +131,7 @@ export function ProductWizardDialog({
 
   const { data: cData } = useCategories();
   const { data: sData } = useSizes();
+  const { data: sgData } = useSizeGroups();
   const { data: colorData } = useColors();
   const { data: bData } = useBrands();
   const { data: fData } = useFeatures();
@@ -147,17 +139,13 @@ export function ProductWizardDialog({
 
   const categoriesData = Array.isArray(cData) ? cData : (cData as any)?.data || [];
   const sizesData = Array.isArray(sData) ? sData : (sData as any)?.data || [];
+  const sizeGroupsData = Array.isArray(sgData) ? sgData : (sgData as any)?.data || [];
   const colorsData = Array.isArray(colorData) ? colorData : (colorData as any)?.data || [];
   const brandsData = Array.isArray(bData) ? bData : (bData as any)?.data || [];
   const featuresData = Array.isArray(fData) ? fData : (fData as any)?.data || [];
   const productGroupsData = Array.isArray(pgData) ? pgData : (pgData as any)?.data || [];
 
-  // slug otomatik oluştur
-  useEffect(() => {
-    if (name && !slug) {
-      setSlug(slugify(name));
-    }
-  }, [name]);
+  const [wizardSizeGroupId, setWizardSizeGroupId] = useState<number | null>(null);
 
   // Step 3 -> Step 4: Varyant satırlarını oluştur
   const buildVariantRows = () => {
@@ -218,11 +206,12 @@ export function ProductWizardDialog({
 
   const handleReset = () => {
     setStep(1);
-    setName(""); setDescription(""); setCategoryId(""); setProductGroupId(""); setBrandId(""); setSlug(""); setDisplayOrder(0);
+    setName(""); setDescription(""); setCategoryId(""); setProductGroupId(""); setBrandId(""); setDisplayOrder(0);
     setBasePrice(""); setDiscountPrice("");
     setIsFeatured(false); setIsBestSeller(false); setIsNewArrival(false);
     setFeatureIds([]);
     setSelectedColorIds([]); setSizesByColor({});
+    setWizardSizeGroupId(null);
     setVariantRows([]); setImageRows([]);
   };
 
@@ -267,7 +256,6 @@ export function ProductWizardDialog({
         isBestSeller,
         isNewArrival,
         displayOrder: Number(displayOrder) || 0,
-        slug: slug.trim(),
         featureIds: featureIds,
         variants: variantRows.map((r) => ({
           colorId: r.colorId,
@@ -373,7 +361,7 @@ export function ProductWizardDialog({
   };
 
   const canGoNext = () => {
-    if (step === 1) return Boolean(name.trim() && categoryId && slug.trim());
+    if (step === 1) return Boolean(name.trim() && categoryId);
     if (step === 2) return Boolean(basePrice);
     if (step === 3) return selectedColorIds.length > 0 && selectedColorIds.every((cId) => (sizesByColor[cId] || []).length > 0);
     return true;
@@ -487,15 +475,9 @@ export function ProductWizardDialog({
                 </select>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <Label htmlFor="p-slug">Slug (URL) *</Label>
-                <Input id="p-slug" value={slug} onChange={(e) => setSlug(e.target.value)} placeholder="ornek-urun-adi" />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="p-order">Sıralama</Label>
-                <Input id="p-order" type="number" value={displayOrder} onChange={(e) => setDisplayOrder(Number(e.target.value))} />
-              </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="p-order">Görüntülenme Sıralaması</Label>
+              <Input id="p-order" type="number" value={displayOrder} onChange={(e) => setDisplayOrder(Number(e.target.value))} placeholder="0" />
             </div>
           </div>
         )}
@@ -622,27 +604,130 @@ export function ProductWizardDialog({
 
             {selectedColorIds.length > 0 && (
               <div className="space-y-4">
-                <Label className="text-sm font-medium">Her Renk İçin Bedenler *</Label>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b pb-2">
+                  <div>
+                    <Label className="text-sm font-medium">Her Renk İçin Bedenler *</Label>
+                    <p className="text-xs text-muted-foreground">İlgili beden grubunu seçerek hızlıca filtreleyebilirsiniz</p>
+                  </div>
+
+                  {sizeGroupsData.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setWizardSizeGroupId(null)}
+                        className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
+                          wizardSizeGroupId === null
+                            ? "bg-primary text-primary-foreground shadow-2xs"
+                            : "bg-muted text-muted-foreground hover:text-foreground hover:bg-muted/80"
+                        }`}
+                      >
+                        Tüm Gruplar
+                      </button>
+                      {sizeGroupsData.map((sg: SizeGroup) => (
+                        <button
+                          key={sg.id}
+                          type="button"
+                          onClick={() => setWizardSizeGroupId(sg.id)}
+                          className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
+                            wizardSizeGroupId === sg.id
+                              ? "bg-primary text-primary-foreground shadow-2xs"
+                              : "bg-muted text-muted-foreground hover:text-foreground hover:bg-muted/80"
+                          }`}
+                        >
+                          {sg.name}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
                 {selectedColorIds.map((colorId) => {
                   const color = (colorsData as Color[]).find((c) => c.id === colorId);
+                  const availableSizes = wizardSizeGroupId
+                    ? (sizesData as Size[]).filter((s) => s.sizeGroupId === wizardSizeGroupId)
+                    : (sizesData as Size[]);
+
+                  const groupSizeIds = availableSizes.map((s) => s.id);
+                  const currentSelectedForColor = sizesByColor[colorId] || [];
+                  const isAllGroupSelected =
+                    availableSizes.length > 0 &&
+                    groupSizeIds.every((id) => currentSelectedForColor.includes(id));
+                  const hasAnySelected = currentSelectedForColor.length > 0;
+
+                  const handleToggleGroup = () => {
+                    setSizesByColor((prev) => {
+                      const existing = prev[colorId] || [];
+                      if (isAllGroupSelected) {
+                        // Gruptaki bedenlerin seçimini kaldır
+                        return {
+                          ...prev,
+                          [colorId]: existing.filter((id) => !groupSizeIds.includes(id)),
+                        };
+                      } else {
+                        // Gruptaki tüm bedenleri seç
+                        const merged = Array.from(new Set([...existing, ...groupSizeIds]));
+                        return { ...prev, [colorId]: merged };
+                      }
+                    });
+                  };
+
+                  const handleClearAllForColor = () => {
+                    setSizesByColor((prev) => ({
+                      ...prev,
+                      [colorId]: [],
+                    }));
+                  };
+
                   return (
                     <div key={colorId} className="border rounded-lg p-3 space-y-2">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
                           <span className="w-4 h-4 rounded-full border" style={{ backgroundColor: color?.hexCode }} />
                           <span className="text-sm font-medium">{color?.name}</span>
+                          {currentSelectedForColor.length > 0 && (
+                            <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-2 py-0.5 rounded-full">
+                              {currentSelectedForColor.length} Beden Seçildi
+                            </span>
+                          )}
                         </div>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 text-xs text-primary hover:text-primary hover:bg-primary/10"
-                          onClick={() => selectAllSizesForColor(colorId)}
-                        >
-                          Tümünü Seç
-                        </Button>
+                        <div className="flex items-center gap-1.5">
+                          {hasAnySelected && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 text-xs text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                              onClick={handleClearAllForColor}
+                              title="Bu renkteki tüm beden seçimlerini temizle"
+                            >
+                              Tümünü Temizle
+                            </Button>
+                          )}
+                          {availableSizes.length > 0 && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className={`h-7 text-xs font-medium transition-colors ${
+                                isAllGroupSelected
+                                  ? "text-rose-600 hover:text-rose-700 hover:bg-rose-50"
+                                  : "text-primary hover:text-primary hover:bg-primary/10"
+                              }`}
+                              onClick={handleToggleGroup}
+                            >
+                              {isAllGroupSelected
+                                ? wizardSizeGroupId
+                                  ? "Grubun Seçimini Kaldır"
+                                  : "Seçimi Kaldır"
+                                : wizardSizeGroupId
+                                ? "Bu Grubu Seç"
+                                : "Tümünü Seç"}
+                            </Button>
+                          )}
+                        </div>
                       </div>
                       <div className="flex flex-wrap gap-2">
-                        {(sizesData as Size[]).map((size) => (
+                        {availableSizes.map((size) => (
                           <button
                             key={size.id}
                             type="button"
@@ -656,6 +741,9 @@ export function ProductWizardDialog({
                             {size.name}
                           </button>
                         ))}
+                        {availableSizes.length === 0 && (
+                          <p className="text-xs text-muted-foreground">Bu grupta tanımlı beden bulunamadı.</p>
+                        )}
                       </div>
                       {(sizesByColor[colorId] || []).length === 0 && (
                         <p className="text-xs text-destructive">En az bir beden seçmelisiniz</p>

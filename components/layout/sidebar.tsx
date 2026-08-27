@@ -26,6 +26,7 @@ import {
   Heart,
   ShieldCheck,
   Plus,
+  MessageSquareWarning,
 } from "lucide-react";
 import { useSession } from "next-auth/react";
 import { Button } from "@/components/ui/button";
@@ -135,6 +136,12 @@ export function Sidebar() {
       roles: ["SUPER_ADMIN", "EDITOR"],
     },
     {
+      title: "Şikayet & Öneriler",
+      href: "/admin/complaint-suggestions",
+      icon: MessageSquareWarning,
+      roles: ["SUPER_ADMIN", "EDITOR", "VIEWER"],
+    },
+    {
       title: "Renkler",
       href: "/admin/colors",
       icon: Palette,
@@ -178,6 +185,12 @@ export function Sidebar() {
       canAdd: true,
       addHref: "/admin/roles?action=new",
       addTitle: "Yeni Rol Ekle",
+    },
+    {
+      title: "Site Ayarları",
+      href: "/admin/site-settings",
+      icon: Settings,
+      roles: ["SUPER_ADMIN", "EDITOR"],
     },
   ];
 

@@ -37,6 +37,7 @@ export function CategoryDialog({
   open,
   onOpenChange,
   initialData,
+  categories,
   isPending,
   onSubmit,
 }: CategoryDialogProps) {
@@ -48,12 +49,13 @@ export function CategoryDialog({
   const [image2, setImage2] = useState<File | null>(null);
 
   // Backend'den doğrudan "ParentCategoryId IS NULL" filtrelenmiş kök kategorileri çekiyoruz
-  const { data: rootCategories } = useRootCategoryLookup();
+  const { data: rootCategories, refetch: refetchRootCategories } = useRootCategoryLookup();
 
   const firstInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (open) {
+      refetchRootCategories();
       setName(initialData?.name || "");
       setSlug(initialData?.slug || "");
       setParentCategoryId(initialData?.parentCategoryId ? String(initialData.parentCategoryId) : "");
@@ -62,7 +64,14 @@ export function CategoryDialog({
       setImage2(null);
       setTimeout(() => firstInputRef.current?.focus(), 50);
     }
-  }, [open, initialData]);
+  }, [open, initialData, refetchRootCategories]);
+
+  // Eğer lookup verisi henüz gelmediyse veya önbellekteyse categories prop'undan ana kategorileri al
+  const fallbackRoots = (categories || [])
+    .filter((c) => !c.parentCategoryId || Number(c.parentCategoryId) === 0)
+    .map((c) => ({ id: c.id, name: c.name }));
+
+  const availableRoots = (rootCategories && rootCategories.length > 0) ? rootCategories : fallbackRoots;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -127,8 +136,8 @@ export function CategoryDialog({
               disabled={isPending}
             >
               <option value="">Ana Kategori (Yok)</option>
-              {rootCategories
-                ?.filter((c) => !initialData?.id || c.id !== initialData.id)
+              {availableRoots
+                .filter((c) => !initialData?.id || c.id !== initialData.id)
                 .map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name}

@@ -148,6 +148,39 @@ export default function CouponsPage() {
       },
     },
     {
+      accessorKey: "usage",
+      header: "Kullanım & Limit",
+      cell: ({ row }) => {
+        const count = row.original.usageCount ?? 0;
+        const limit = row.original.usageLimit;
+        const isSingleUse = row.original.isSingleUsePerUser ?? true;
+        const isLimitReached = Boolean(limit && count >= limit);
+
+        return (
+          <div className="space-y-1">
+            <div className="flex items-center gap-1.5 text-xs font-semibold">
+              <span className="font-mono">{count}</span>
+              <span className="text-muted-foreground font-normal">/</span>
+              <span className="font-mono text-muted-foreground">
+                {limit && limit > 0 ? `${limit} Adet` : "Sınırsız"}
+              </span>
+            </div>
+            <div className="flex items-center gap-1">
+              {isLimitReached ? (
+                <Badge variant="outline" className="bg-rose-500/10 text-rose-600 border-rose-500/20 text-[10px]">
+                  Kota Doldu
+                </Badge>
+              ) : (
+                <Badge variant="outline" className="bg-muted text-muted-foreground text-[10px] font-normal">
+                  {isSingleUse ? "Kişi Başı 1 Kez" : "Çoklu Kullanım"}
+                </Badge>
+              )}
+            </div>
+          </div>
+        );
+      },
+    },
+    {
       accessorKey: "validity",
       header: "Geçerlilik Tarihleri",
       cell: ({ row }) => {
@@ -183,7 +216,7 @@ export default function CouponsPage() {
       accessorKey: "isShowcase",
       header: "Vitrin Durumu",
       cell: ({ row }) => {
-        const isShowcase = Boolean(row.original.isShowcase);
+        const isShowcase = Boolean(row.original.isShowcase ?? (row.original as any).IsShowcase);
         return isShowcase ? (
           <Badge variant="default" className="bg-[#4A5D3E] hover:bg-[#3D4D33] text-white text-[11px] gap-1 shadow-xs">
             🌟 Vitrinde Yayında

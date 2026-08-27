@@ -46,6 +46,8 @@ export function useCreateCategory() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["categories"] });
+      queryClient.invalidateQueries({ queryKey: ["categories-lookup-root"] });
+      queryClient.invalidateQueries({ queryKey: ["categories-lookup"] });
     },
   });
 }
@@ -70,6 +72,8 @@ export function useUpdateCategory() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["categories"] });
+      queryClient.invalidateQueries({ queryKey: ["categories-lookup-root"] });
+      queryClient.invalidateQueries({ queryKey: ["categories-lookup"] });
     },
   });
 }
@@ -80,6 +84,8 @@ export function useDeleteCategory() {
     mutationFn: (id: number) => axiosInstance.delete("/api/categories", { data: { id } }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["categories"] });
+      queryClient.invalidateQueries({ queryKey: ["categories-lookup-root"] });
+      queryClient.invalidateQueries({ queryKey: ["categories-lookup"] });
     },
   });
 }

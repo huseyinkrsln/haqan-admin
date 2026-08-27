@@ -96,7 +96,7 @@ export function useDeleteProductGroup() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (id: number) => {
-      const res = await axiosInstance.delete("/api/productgroups", {
+      const res = await axiosInstance.delete("/api/productgroups/softdelete", {
         data: { id },
       });
       return res.data;

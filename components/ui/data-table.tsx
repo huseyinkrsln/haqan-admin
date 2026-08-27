@@ -97,7 +97,7 @@ export function DataTable<TData, TValue>({
     columns,
     manualPagination: isServerPagination,
     pageCount: isServerPagination ? (pageCount ?? Math.max(1, Math.ceil((totalRecords || 1) / (pageSize || 10)))) : undefined,
-    autoResetPageIndex: !isServerPagination,
+    autoResetPageIndex: false,
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
     onPaginationChange: isServerPagination ? undefined : setClientPagination,
@@ -119,11 +119,25 @@ export function DataTable<TData, TValue>({
     },
   })
 
+  // Sadece filtre / arama değiştiğinde ilk sayfaya dön
   React.useEffect(() => {
     if (!isServerPagination) {
       setClientPagination((prev) => ({ ...prev, pageIndex: 0 }))
     }
-  }, [data, effectiveFilter, isServerPagination])
+  }, [effectiveFilter, isServerPagination])
+
+  // Veri değiştiğinde (silme vb.) mevcut sayfayı koru, sadece sayfa sayısı azaldıysa son sayfaya clamp et
+  React.useEffect(() => {
+    if (!isServerPagination && data) {
+      setClientPagination((prev) => {
+        const maxPage = Math.max(0, Math.ceil(data.length / prev.pageSize) - 1)
+        if (prev.pageIndex > maxPage) {
+          return { ...prev, pageIndex: maxPage }
+        }
+        return prev
+      })
+    }
+  }, [data, isServerPagination])
 
   const paginationState = isServerPagination
     ? { pageIndex: (page || 1) - 1, pageSize: pageSize || 10 }

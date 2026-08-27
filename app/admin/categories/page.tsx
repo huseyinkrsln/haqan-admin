@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { ColumnDef } from "@tanstack/react-table";
 import Link from "next/link";
-import { Plus, Edit, Trash2, Layers } from "lucide-react";
+import { Plus, Edit, Trash2, Layers, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { useSession } from "next-auth/react";
 
@@ -17,6 +17,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { Badge } from "@/components/ui/badge";
 import { CategoryDialog } from "@/components/admin/category-dialog";
 import { CategoryProductGroupsDialog } from "@/components/admin/category-product-groups-dialog";
+import { getApiErrorMessage } from "@/lib/utils";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -60,7 +61,7 @@ export default function CategoriesPage() {
           toast.success("Kategori güncellendi.");
           setDialogOpen(false);
         },
-        onError: () => toast.error("Kategori güncellenirken hata oluştu.")
+        onError: (err: any) => toast.error(getApiErrorMessage(err, "Kategori güncellenirken hata oluştu."))
       });
     } else {
       createMutation.mutate(data, {
@@ -68,7 +69,7 @@ export default function CategoriesPage() {
           toast.success("Kategori başarıyla eklendi.");
           setDialogOpen(false);
         },
-        onError: () => toast.error("Kategori eklenirken hata oluştu.")
+        onError: (err: any) => toast.error(getApiErrorMessage(err, "Kategori eklenirken hata oluştu."))
       });
     }
   };
@@ -76,11 +77,12 @@ export default function CategoriesPage() {
   const handleDelete = (id: number) => {
     deleteMutation.mutate(id, {
       onSuccess: () => {
-        toast.success("Kategori silindi.");
+        toast.success("Kategori başarıyla silindi.");
         setToDelete(null);
       },
-      onError: () => {
-        toast.error("Kategori silinirken hata oluştu.");
+      onError: (err: any) => {
+        const errorMsg = getApiErrorMessage(err, "Kategori silinirken hata oluştu.");
+        toast.error(errorMsg, { duration: 6000 });
         setToDelete(null);
       }
     });
@@ -90,6 +92,12 @@ export default function CategoriesPage() {
 
   // parentCategoryId eşleştirme: liste içinde ana kategori adını bul
   const categoryMap = Object.fromEntries(categories.map((c) => [c.id, c.name]));
+
+  // Silinmek istenen kategorinin alt kategorilerini tespit et
+  const subCategoriesOfToDelete = toDelete
+    ? categories.filter((c) => c.parentCategoryId === toDelete.id)
+    : [];
+  const hasSubCategories = subCategoriesOfToDelete.length > 0;
 
   const columns: ColumnDef<Category>[] = [
     { accessorKey: "name", header: "Kategori Adı" },
@@ -164,19 +172,20 @@ export default function CategoriesPage() {
         </Breadcrumb>
         {role !== "VIEWER" && (
           <Button onClick={() => { setSelected(null); setDialogOpen(true); }}>
-            <Plus className="mr-2 h-4 w-4" /> Kategori Ekle
+            <Plus className="mr-2 h-4 w-4" /> Yeni Kategori
           </Button>
         )}
       </div>
 
-      {isLoading ? (
-        <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
-          <Spinner size="lg" className="mb-4" />
-          <p>Kategoriler yükleniyor...</p>
-        </div>
-      ) : (
-        <DataTable columns={columns} data={categories} onRefresh={() => refetch()} isRefreshing={isFetching} />
-      )}
+      <DataTable
+        columns={columns}
+        data={categories}
+        searchKey="name"
+        searchPlaceholder="Kategori ara..."
+        loading={isLoading}
+        onRefresh={() => refetch()}
+        isRefreshing={isFetching}
+      />
 
       <CategoryDialog
         open={dialogOpen}
@@ -195,21 +204,58 @@ export default function CategoriesPage() {
       />
 
       <AlertDialog open={!!toDelete} onOpenChange={(open) => { if (!deleteMutation.isPending && !open) setToDelete(null); }}>
-        <AlertDialogContent>
+        <AlertDialogContent className="sm:max-w-md">
           <AlertDialogHeader>
-            <AlertDialogTitle>Bu kategoriyi silmek istediğinize emin misiniz?</AlertDialogTitle>
+            <AlertDialogTitle className="flex items-center gap-2 text-rose-600">
+              <AlertTriangle className="h-5 w-5" />
+              Kategoriyi Sil
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              &quot;{toDelete?.name}&quot; kategorisi kalıcı olarak silinecek. Bu kategoriye bağlı ürünler etkilenebilir.
+              <strong>&quot;{toDelete?.name}&quot;</strong> kategorisini silmek üzeresiniz.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={deleteMutation.isPending}>İptal</AlertDialogCancel>
+
+          {hasSubCategories ? (
+            <div className="p-3.5 bg-amber-500/10 border border-amber-500/30 rounded-lg text-xs text-amber-900 dark:text-amber-200 space-y-2 my-1">
+              <div className="font-semibold flex items-center gap-1.5 text-amber-700 dark:text-amber-400">
+                <AlertTriangle className="h-4 w-4 shrink-0" />
+                <span>Bu kategoriye bağlı {subCategoriesOfToDelete.length} adet alt kategori bulunmaktadır:</span>
+              </div>
+              <ul className="list-disc list-inside space-y-0.5 font-medium pl-1 text-foreground">
+                {subCategoriesOfToDelete.map((sub) => (
+                  <li key={sub.id}>{sub.name}</li>
+                ))}
+              </ul>
+              <p className="text-[11px] text-muted-foreground pt-1 border-t border-amber-500/20">
+                Alt kategorisi olan ana kategoriler doğrudan silinemez. Silme işlemi yapabilmek için önce alt kategorileri silmeli veya başka bir üst kategoriye taşımalısınız.
+              </p>
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground my-1">
+              Bu işlem kategoriyi sistemden kaldıracaktır. Kategoriye bağlı ürünler bulunuyorsa silme işlemi engellenecektir.
+            </p>
+          )}
+
+          <AlertDialogFooter className="gap-2 sm:gap-0 mt-2">
+            <AlertDialogCancel disabled={deleteMutation.isPending}>
+              {hasSubCategories ? "Kapat" : "İptal"}
+            </AlertDialogCancel>
             <AlertDialogAction
-              onClick={(e) => { e.preventDefault(); if (toDelete) handleDelete(toDelete.id); }}
-              disabled={deleteMutation.isPending}
+              onClick={(e) => {
+                e.preventDefault();
+                if (toDelete) handleDelete(toDelete.id);
+              }}
+              disabled={deleteMutation.isPending || hasSubCategories}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              {deleteMutation.isPending ? <><Spinner size="sm" className="mr-2" />Siliniyor...</> : "Evet, Sil"}
+              {deleteMutation.isPending ? (
+                <>
+                  <Spinner size="sm" className="mr-2" />
+                  Siliniyor...
+                </>
+              ) : (
+                "Evet, Sil"
+              )}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { ColumnDef } from "@tanstack/react-table";
 import Link from "next/link";
 import {
@@ -58,15 +59,26 @@ const statusConfig: Record<string, { label: string; color: string; icon: any; en
 export default function OrdersPage() {
   const { data: session } = useSession();
   const role = (session?.user as any)?.role;
+  const searchParams = useSearchParams();
+  const urlSearch = searchParams.get("search") || searchParams.get("id") || searchParams.get("orderId") || "";
 
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [toDelete, setToDelete] = useState<Order | null>(null);
   const [statusFilter, setStatusFilter] = useState<OrderStatusEnum | "all">("all");
-  const [searchTerm, setSearchTerm] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [searchTerm, setSearchTerm] = useState(urlSearch);
+  const [debouncedSearch, setDebouncedSearch] = useState(urlSearch);
   const [page, setPage] = useState<number>(1);
   const [pageSize, setPageSize] = useState<number>(10);
+
+  // URL'den gelen arama parametresini dinle
+  useEffect(() => {
+    if (urlSearch) {
+      setSearchTerm(urlSearch);
+      setDebouncedSearch(urlSearch);
+      setPage(1);
+    }
+  }, [urlSearch]);
 
   // Arama için 300ms debounce
   useEffect(() => {
@@ -98,6 +110,19 @@ export default function OrdersPage() {
     ? data.length 
     : ((data as any)?.totalRecords ?? (data as any)?.TotalRecords ?? orders.length);
   const totalPages: number = (data as any)?.totalPages ?? Math.max(1, Math.ceil(totalRecords / pageSize));
+
+  // URL'den gelen ID ile eşleşen sipariş varsa modalı otomatik aç
+  useEffect(() => {
+    if (urlSearch && orders.length > 0 && !detailOpen) {
+      const matched = orders.find(
+        (o) => String(o.id) === urlSearch || String(o.orderNumber) === urlSearch
+      );
+      if (matched) {
+        setSelectedOrder(matched);
+        setDetailOpen(true);
+      }
+    }
+  }, [urlSearch, orders, detailOpen]);
 
   const handleDelete = (id: number) => {
     deleteMutation.mutate(id, {

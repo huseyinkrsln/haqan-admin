@@ -952,13 +952,24 @@ export default function ProductDetailPage() {
                             >
                               <SelectTrigger className="h-9 text-xs">
                                 <SelectValue placeholder="Beden Seçin">
-                                  {globalSizes?.find((s: any) => String(s.id) === String(newVariant.sizeId))?.name || "Beden Seçin"}
+                                  {(() => {
+                                    const s = globalSizes?.find((x: any) => String(x.id) === String(newVariant.sizeId));
+                                    if (!s) return "Beden Seçin";
+                                    return s.sizeGroupName ? `${s.name} (${s.sizeGroupName})` : s.name;
+                                  })()}
                                 </SelectValue>
                               </SelectTrigger>
                               <SelectContent>
                                 {globalSizes?.map((s: any) => (
                                   <SelectItem key={s.id} value={String(s.id)}>
-                                    <span className="text-xs font-medium">{s.name}</span>
+                                    <div className="flex items-center justify-between w-full gap-2">
+                                      <span className="text-xs font-semibold">{s.name}</span>
+                                      {s.sizeGroupName && (
+                                        <span className="text-[10px] text-muted-foreground bg-slate-100 px-1.5 py-0.5 rounded">
+                                          {s.sizeGroupName}
+                                        </span>
+                                      )}
+                                    </div>
                                   </SelectItem>
                                 ))}
                               </SelectContent>

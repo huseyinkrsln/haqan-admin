@@ -62,8 +62,10 @@ export default function FavoritesPage() {
           <div className="flex items-center gap-3">
             <Link
               href={`/admin/products/${item.productId}`}
+              target="_blank"
+              rel="noopener noreferrer"
               className="relative h-12 w-12 rounded-md border bg-muted shrink-0 overflow-hidden flex items-center justify-center hover:ring-2 hover:ring-primary transition-all group"
-              title="Ürün Detay Sayfasına Git"
+              title="Ürün Detay Sayfasını Yeni Sekmede Aç"
             >
               {imgUrl ? (
                 <Image
@@ -82,8 +84,10 @@ export default function FavoritesPage() {
               <div className="flex items-center gap-1.5">
                 <Link 
                   href={`/admin/products/${item.productId}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
                   className="font-semibold text-sm hover:text-primary hover:underline transition-colors inline-flex items-center gap-1 text-foreground"
-                  title="Ürün Detay Sayfasına Git"
+                  title="Ürün Detay Sayfasını Yeni Sekmede Aç"
                 >
                   <span>{item.productName || `Ürün #${item.productId}`}</span>
                   <ExternalLink className="h-3.5 w-3.5 text-muted-foreground hover:text-primary shrink-0" />

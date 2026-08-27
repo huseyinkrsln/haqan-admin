@@ -59,7 +59,7 @@ export function useUpdateCoupon() {
 export function useDeleteCoupon() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (id: number) => axiosInstance.delete("/api/coupons", { data: { id } }),
+    mutationFn: (id: number) => axiosInstance.delete("/api/coupons/softdelete", { data: { id } }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["coupons"] });
     },

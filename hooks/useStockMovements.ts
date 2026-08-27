@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { axiosInstance } from "@/lib/axios";
 import { StockMovement, PaginatedResult } from "@/types/api.types";
 
@@ -24,6 +24,28 @@ export function useStockMovements(
       }
       const res = await axiosInstance.get(url);
       return res.data;
+    },
+  });
+}
+
+export function useCreateStockMovement() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (dto: {
+      productVariantId: number;
+      movementType: string;
+      quantity: number;
+      previousStock?: number;
+      currentStock?: number;
+      referenceType?: string;
+      referenceId?: string;
+      note?: string;
+    }) => axiosInstance.post("/api/stockmovements", dto),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["stock-movements"] });
+      queryClient.invalidateQueries({ queryKey: ["products"] });
+      queryClient.invalidateQueries({ queryKey: ["product"] });
+      queryClient.invalidateQueries({ queryKey: ["productVariants"] });
     },
   });
 }

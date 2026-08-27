@@ -32,15 +32,35 @@ export interface Color extends BaseEntity {
 export type CreateColorDto = Pick<Color, "name" | "hexCode">;
 export type UpdateColorDto = Pick<Color, "id" | "name" | "hexCode">;
 
+// ─── Size Groups ─────────────────────────────────────────────────────────────
+
+export interface SizeGroup extends BaseEntity {
+  name: string;
+  sizes?: Size[];
+}
+
+export type CreateSizeGroupDto = Pick<SizeGroup, "name">;
+export type UpdateSizeGroupDto = Pick<SizeGroup, "id" | "name">;
+
 // ─── Sizes ───────────────────────────────────────────────────────────────────
 
 export interface Size extends BaseEntity {
   name: string;
-  sizeGroup: string;
+  sizeGroupId: number;
+  sizeGroupName?: string;
+  sizeGroup?: string; // backwards compatibility
 }
 
-export type CreateSizeDto = Pick<Size, "name" | "sizeGroup">;
-export type UpdateSizeDto = Pick<Size, "id" | "name" | "sizeGroup">;
+export interface CreateSizeDto {
+  name: string;
+  sizeGroupId: number;
+}
+
+export interface UpdateSizeDto {
+  id: number;
+  name: string;
+  sizeGroupId: number;
+}
 
 // ─── Brands ──────────────────────────────────────────────────────────────────
 
@@ -123,6 +143,10 @@ export interface Product {
   slug: string;
   features?: Feature[];
   featureIds?: number[];
+  totalStock?: number;
+  variantCount?: number;
+  primaryImageUrl?: string;
+  categoryName?: string;
 }
 
 export interface UpdateProductDto {
@@ -311,6 +335,9 @@ export interface Coupon extends BaseEntity {
   startDate: string;
   endDate: string;
   isShowcase?: boolean;
+  usageLimit?: number | null;
+  usageCount?: number;
+  isSingleUsePerUser?: boolean;
 }
 
 export interface CreateCouponDto {
@@ -321,6 +348,8 @@ export interface CreateCouponDto {
   startDate: string;
   endDate: string;
   isShowcase?: boolean;
+  usageLimit?: number | null;
+  isSingleUsePerUser?: boolean;
 }
 
 export interface UpdateCouponDto extends CreateCouponDto {
@@ -369,17 +398,44 @@ export interface ShippingCarrier extends BaseEntity {
 
 // ─── Stock Movements ─────────────────────────────────────────────────────────
 
+export enum StockMovementType {
+  All = 0,
+  In = 1,
+  Out = 2,
+  Order = 3,
+  Return = 4,
+  Adjustment = 5,
+  Waste = 6,
+}
+
+export enum StockMovementReferenceType {
+  SupplierReceipt = 1,
+  Order = 2,
+  OrderReturn = 3,
+  Audit = 4,
+  Waste = 5,
+  Manual = 6,
+}
+
 export interface StockMovement extends BaseEntity {
   productVariantId: number;
-  movementType: string;
+  movementType: string | StockMovementType;
   quantity: number;
   previousStock: number;
   currentStock: number;
-  referenceType?: string;
+  referenceType?: string | StockMovementReferenceType;
   referenceId?: string | number;
   note?: string;
   userId?: number;
   createdDate?: string;
+  productId?: number;
+  productName?: string;
+  productImageUrl?: string;
+  colorName?: string;
+  colorHexCode?: string;
+  sizeName?: string;
+  sku?: string;
+  barcode?: string;
 }
 
 // ─── Carts ───────────────────────────────────────────────────────────────────
@@ -468,5 +524,100 @@ export interface CreateProductGroupDto {
 export interface UpdateProductGroupDto extends Partial<CreateProductGroupDto> {
   id: number;
   imageUrl?: string;
+}
+
+// ─── Complaint & Suggestions (Şikayet & Öneri) ──────────────────────────────
+
+export enum FeedbackType {
+  Complaint = 1,  // Şikayet
+  Suggestion = 2, // Öneri
+  Request = 3,    // Talep / İstek
+  Other = 4       // Diğer
+}
+
+export enum FeedbackStatus {
+  Pending = 1,    // Beklemede
+  InReview = 2,   // İnceleniyor
+  Resolved = 3,   // Çözüldü / Yanıtlandı
+  Rejected = 4    // Reddedildi / Kapatıldı
+}
+
+export interface ComplaintSuggestion extends BaseEntity {
+  type: FeedbackType | number | string;
+  typeName?: string;
+  processStatus: FeedbackStatus | number | string;
+  processStatusName?: string;
+  userId?: number;
+  fullName?: string;
+  email?: string;
+  phoneNumber?: string;
+  subject: string;
+  message: string;
+  orderId?: number;
+  createdDate?: string;
+  adminNote?: string;
+  resolvedDate?: string;
+}
+
+export interface ComplaintSuggestionStats {
+  totalCount: number;
+  pendingCount: number;
+  inReviewCount: number;
+  resolvedCount: number;
+  rejectedCount: number;
+  complaintCount: number;
+  suggestionCount: number;
+  requestCount: number;
+  otherCount: number;
+}
+
+export interface ComplaintSuggestionPaginationResponse {
+  items: ComplaintSuggestion[];
+  totalRecords: number;
+  totalPages: number;
+  pageNumber: number;
+  pageSize: number;
+  stats: ComplaintSuggestionStats;
+}
+
+export interface UpdateComplaintSuggestionStatusDto {
+  id: number;
+  processStatus: FeedbackStatus | number;
+  adminNote?: string;
+}
+
+// ─── Site Settings (Site Ayarları) ──────────────────────────────────────────
+
+export interface SiteSetting extends BaseEntity {
+  settingKey: string;
+  settingValue?: string;
+  groupKey?: string;
+  description?: string;
+}
+
+export interface CreateSiteSettingDto {
+  settingKey: string;
+  settingValue?: string;
+  groupKey?: string;
+  description?: string;
+}
+
+export interface UpdateSiteSettingDto {
+  id: number;
+  settingKey: string;
+  settingValue?: string;
+  groupKey?: string;
+  description?: string;
+}
+
+export interface SiteSettingBulkItemDto {
+  settingKey: string;
+  settingValue?: string;
+  groupKey?: string;
+  description?: string;
+}
+
+export interface BulkUpdateSiteSettingDto {
+  settings: SiteSettingBulkItemDto[];
 }
 

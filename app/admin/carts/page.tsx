@@ -121,15 +121,6 @@ export default function CartsPage() {
       },
     },
     {
-      accessorKey: "cartToken",
-      header: "Sepet Token",
-      cell: ({ row }) => (
-        <span className="font-mono text-xs text-muted-foreground truncate max-w-xs block">
-          {row.original.cartToken}
-        </span>
-      ),
-    },
-    {
       accessorKey: "expiresAt",
       header: "Son Geçerlilik",
       cell: ({ row }) => {
@@ -208,7 +199,7 @@ export default function CartsPage() {
           columns={columns}
           data={carts}
           showSearch={true}
-          searchPlaceholder="Sepet Token veya Arama Yap..."
+          searchPlaceholder="Müşteri adı, e-posta veya sepet ID ile ara..."
           searchValue={searchTerm}
           onSearchChange={setSearchTerm}
           totalRecords={totalRecords}

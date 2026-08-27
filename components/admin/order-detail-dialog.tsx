@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { Order, ShippingCarrier } from "@/types/api.types";
-import { useUpdateOrder, useOrderItems } from "@/hooks/useOrders";
+import { useUpdateOrder, useOrderItems, useOrder } from "@/hooks/useOrders";
 import { useShippingCarriers } from "@/hooks/useShippingCarriers";
 import { getMinioUrl } from "@/lib/utils";
 import {
@@ -55,7 +55,8 @@ import {
 interface OrderDetailDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  order: Order | null;
+  order?: Order | null;
+  orderId?: number | null;
 }
 
 const statusConfig: Record<string, { label: string; color: string; icon: any }> = {
@@ -77,11 +78,22 @@ const statusLabels: Record<string, string> = {
 export function OrderDetailDialog({
   open,
   onOpenChange,
-  order,
+  order: initialOrder,
+  orderId,
 }: OrderDetailDialogProps) {
+  const effectiveOrderId = initialOrder?.id || orderId || undefined;
+  const { data: fetchedOrderData, isLoading: isOrderFetching } = useOrder(
+    open && !initialOrder && effectiveOrderId ? effectiveOrderId : undefined
+  );
+
+  const order: Order | null =
+    initialOrder || (fetchedOrderData as any)?.data || fetchedOrderData || null;
+
   const updateOrderMutation = useUpdateOrder();
   const { data: carriersData } = useShippingCarriers();
-  const { data: itemsData, isLoading: itemsLoading } = useOrderItems(order?.id);
+  const { data: itemsData, isLoading: itemsLoading } = useOrderItems(
+    open && order?.id ? order.id : undefined
+  );
 
   const [orderStatus, setOrderStatus] = useState<string>("Pending");
   const [shippingCarrierId, setShippingCarrierId] = useState<string>("");
@@ -100,6 +112,19 @@ export function OrderDetailDialog({
       setTrackingNumber(order.trackingNumber || "");
     }
   }, [order, open]);
+
+  if (!open) return null;
+
+  if (isOrderFetching && !order) {
+    return (
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="sm:max-w-xl py-16 flex flex-col items-center justify-center">
+          <Spinner size="lg" className="mb-4" />
+          <p className="text-sm font-medium text-muted-foreground">Sipariş detayları yükleniyor...</p>
+        </DialogContent>
+      </Dialog>
+    );
+  }
 
   if (!order) return null;
 

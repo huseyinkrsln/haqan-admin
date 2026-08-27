@@ -31,3 +31,20 @@ export function getCategoryBreadcrumb(category: any, allCategories: any[] = []):
 
   return name;
 }
+
+export function getApiErrorMessage(err: any, fallback = "İşlem sırasında bir hata oluştu."): string {
+  if (!err) return fallback;
+  if (typeof err === "string") return err;
+  const data = err.response?.data;
+  if (!data) return err.message || fallback;
+  if (typeof data === "string") return data;
+  if (data.Message) return data.Message;
+  if (data.message) return data.message;
+  if (data.errors && typeof data.errors === "object") {
+    const firstKey = Object.keys(data.errors)[0];
+    if (firstKey && Array.isArray(data.errors[firstKey]) && data.errors[firstKey].length > 0) {
+      return data.errors[firstKey][0];
+    }
+  }
+  return fallback;
+}

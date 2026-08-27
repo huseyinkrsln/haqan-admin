@@ -106,7 +106,7 @@ export function useDeleteProduct() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id: number) =>
-      axiosInstance.delete("/api/products", { data: { id } }),
+      axiosInstance.delete("/api/products/softdelete", { data: { id } }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["products"] });
     },

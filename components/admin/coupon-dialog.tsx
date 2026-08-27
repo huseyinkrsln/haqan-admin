@@ -45,6 +45,8 @@ export function CouponDialog({
   const [minOrderAmount, setMinOrderAmount] = useState<number>(0);
   const [startDate, setStartDate] = useState<string>("");
   const [endDate, setEndDate] = useState<string>("");
+  const [usageLimit, setUsageLimit] = useState<string>("");
+  const [isSingleUsePerUser, setIsSingleUsePerUser] = useState<boolean>(true);
   const [isShowcase, setIsShowcase] = useState<boolean>(false);
 
   useEffect(() => {
@@ -55,6 +57,8 @@ export function CouponDialog({
       setMinOrderAmount(initialData.minOrderAmount || 0);
       setStartDate(initialData.startDate ? initialData.startDate.slice(0, 10) : "");
       setEndDate(initialData.endDate ? initialData.endDate.slice(0, 10) : "");
+      setUsageLimit(initialData.usageLimit !== null && initialData.usageLimit !== undefined ? String(initialData.usageLimit) : "");
+      setIsSingleUsePerUser(initialData.isSingleUsePerUser ?? true);
       setIsShowcase(Boolean(initialData.isShowcase));
     } else {
       const today = new Date().toISOString().slice(0, 10);
@@ -65,6 +69,8 @@ export function CouponDialog({
       setMinOrderAmount(0);
       setStartDate(today);
       setEndDate(nextMonth);
+      setUsageLimit("");
+      setIsSingleUsePerUser(true);
       setIsShowcase(false);
     }
   }, [initialData, open]);
@@ -78,6 +84,8 @@ export function CouponDialog({
       minOrderAmount: Number(minOrderAmount),
       startDate: new Date(startDate).toISOString(),
       endDate: new Date(endDate).toISOString(),
+      usageLimit: usageLimit !== "" && Number(usageLimit) > 0 ? Number(usageLimit) : null,
+      isSingleUsePerUser,
       isShowcase,
     };
 
@@ -90,14 +98,14 @@ export function CouponDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <TicketPercent className="h-5 w-5 text-primary" />
             {initialData ? "Kuponu Düzenle" : "Yeni Kupon Oluştur"}
           </DialogTitle>
           <DialogDescription>
-            Kullanıcıların ödeme adımında kullanabileceği indirim kuponunu tanımlayın.
+            Kullanıcıların ödeme adımında kullanabileceği indirim kuponunu ve limitlerini tanımlayın.
           </DialogDescription>
         </DialogHeader>
 
@@ -146,17 +154,30 @@ export function CouponDialog({
             </div>
           </div>
 
-          <div className="space-y-1.5">
-            <Label htmlFor="minOrderAmount">Minimum Sepet Tutarı (₺)</Label>
-            <Input
-              id="minOrderAmount"
-              type="number"
-              min={0}
-              placeholder="0 (Alt limit yok)"
-              value={minOrderAmount}
-              onChange={(e) => setMinOrderAmount(Number(e.target.value))}
-            />
-            <p className="text-xs text-muted-foreground">0 bırakırsanız sepet alt limiti uygulanmaz.</p>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="minOrderAmount">Min. Sepet Tutarı (₺)</Label>
+              <Input
+                id="minOrderAmount"
+                type="number"
+                min={0}
+                placeholder="0 (Alt limit yok)"
+                value={minOrderAmount}
+                onChange={(e) => setMinOrderAmount(Number(e.target.value))}
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="usageLimit">Toplam Kullanım Limiti</Label>
+              <Input
+                id="usageLimit"
+                type="number"
+                min={1}
+                placeholder="Boş bırakılırsa sınırsız"
+                value={usageLimit}
+                onChange={(e) => setUsageLimit(e.target.value)}
+              />
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -180,6 +201,23 @@ export function CouponDialog({
                 required
               />
             </div>
+          </div>
+
+          {/* Kullanıcı Başına Tek Kullanım Switch */}
+          <div className="flex items-center justify-between p-3 rounded-xl border bg-muted/20">
+            <div className="space-y-0.5">
+              <Label htmlFor="isSingleUsePerUser" className="text-sm font-semibold cursor-pointer">
+                Kişi Başına Tek Kullanım
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                Her üye kullanıcı bu kupondan yalnızca 1 defa yararlanabilir.
+              </p>
+            </div>
+            <Switch
+              id="isSingleUsePerUser"
+              checked={isSingleUsePerUser}
+              onCheckedChange={setIsSingleUsePerUser}
+            />
           </div>
 
           {/* 🌟 Vitrinde / Alt Çubukta Göster Switch 🌟 */}

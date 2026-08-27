@@ -7,8 +7,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { useSession } from "next-auth/react";
-import { Plus, Trash2, ChevronLeft, ChevronRight, Eye } from "lucide-react";
+import { Plus, Trash2, ChevronLeft, ChevronRight, Eye, PackagePlus, Boxes, RefreshCw } from "lucide-react";
 import { ProductWizardDialog } from "@/components/admin/product-wizard-dialog";
+import { QuickStockDialog } from "@/components/admin/quick-stock-dialog";
 import { toast } from "sonner";
 import Link from "next/link";
 import {
@@ -38,7 +39,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
-import { RefreshCw } from "lucide-react";
 import {
   useProducts,
   useCreateComplexProduct,
@@ -47,6 +47,14 @@ import {
 } from "@/hooks/useProducts";
 import { Product, CreateComplexProductDto } from "@/types/api.types";
 
+const MINIO_URL = process.env.NEXT_PUBLIC_MINIO_URL || "http://127.0.0.1:9000";
+
+function getMinioUrl(path?: string) {
+  if (!path) return "";
+  if (path.startsWith("http")) return path;
+  return `${MINIO_URL}${path.startsWith("/") ? "" : "/"}${path}`;
+}
+
 export default function ProductsPage() {
   const { data: session } = useSession();
   const role = (session?.user as any)?.role;
@@ -54,6 +62,7 @@ export default function ProductsPage() {
   const urlSearch = searchParams.get("search") || "";
 
   const [isWizardOpen, setIsWizardOpen] = useState(false);
+  const [stockModalProductId, setStockModalProductId] = useState<number | null>(null);
   const [productToDelete, setProductToDelete] = useState<Product | null>(null);
   const [search, setSearch] = useState(urlSearch);
   const [debouncedSearch, setDebouncedSearch] = useState(urlSearch);
@@ -188,9 +197,10 @@ export default function ProductsPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-12">#</TableHead>
-                  <TableHead>Ürün Adı</TableHead>
+                  <TableHead>Ürün Bilgisi</TableHead>
                   <TableHead>Fiyat</TableHead>
                   <TableHead>İndirimli Fiyat</TableHead>
+                  <TableHead>Stok Durumu</TableHead>
                   <TableHead>Etiketler</TableHead>
                   <TableHead>Sıra</TableHead>
                   {role !== "VIEWER" && (
@@ -202,92 +212,154 @@ export default function ProductsPage() {
                 {filtered.length === 0 ? (
                   <TableRow>
                     <TableCell
-                      colSpan={7}
+                      colSpan={8}
                       className="h-24 text-center text-muted-foreground"
                     >
                       {search ? "Arama sonucu bulunamadı." : "Henüz ürün eklenmedi."}
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filtered.map((product, idx) => (
-                    <TableRow key={product.id}>
-                      <TableCell className="text-muted-foreground text-xs">
-                        {(page - 1) * take + idx + 1}
-                      </TableCell>
-                      <TableCell>
-                        <div>
-                          <p className="font-medium">{product.name}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {product.slug}
-                          </p>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        {new Intl.NumberFormat("tr-TR", {
-                          style: "currency",
-                          currency: "TRY",
-                        }).format(product.basePrice)}
-                      </TableCell>
-                      <TableCell>
-                        {product.discountPrice ? (
-                          <span className="text-green-600 font-medium">
-                            {new Intl.NumberFormat("tr-TR", {
-                              style: "currency",
-                              currency: "TRY",
-                            }).format(product.discountPrice)}
-                          </span>
-                        ) : (
-                          <span className="text-muted-foreground text-xs">—</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex gap-1.5 flex-wrap">
-                          {product.isFeatured && (
-                            <Badge variant="outline" className="text-[11px] font-semibold bg-amber-50 text-amber-800 border-amber-300 shadow-2xs">
-                              ★ Öne Çıkan
-                            </Badge>
-                          )}
-                          {product.isBestSeller && (
-                            <Badge variant="outline" className="text-[11px] font-semibold bg-rose-50 text-rose-800 border-rose-300 shadow-2xs">
-                              🔥 Çok Satan
-                            </Badge>
-                          )}
-                          {product.isNewArrival && (
-                            <Badge variant="outline" className="text-[11px] font-semibold bg-indigo-50 text-indigo-800 border-indigo-300 shadow-2xs">
-                              ✨ Yeni Gelen
-                            </Badge>
-                          )}
-                          {!product.isFeatured && !product.isBestSeller && !product.isNewArrival && (
+                  filtered.map((product, idx) => {
+                    const imgUrl = product.primaryImageUrl ? getMinioUrl(product.primaryImageUrl) : "";
+                    const totalStock = product.totalStock ?? 0;
+                    return (
+                      <TableRow key={product.id}>
+                        <TableCell className="text-muted-foreground text-xs font-mono">
+                          {(page - 1) * take + idx + 1}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-3 py-0.5">
+                            {imgUrl ? (
+                              <img
+                                src={imgUrl}
+                                alt={product.name}
+                                className="h-10 w-10 rounded-md object-cover border shrink-0 bg-muted"
+                                onError={(e) => {
+                                  (e.target as HTMLElement).style.display = "none";
+                                }}
+                              />
+                            ) : (
+                              <div className="h-10 w-10 rounded-md bg-muted/60 border flex items-center justify-center shrink-0 text-muted-foreground">
+                                <Boxes className="h-4 w-4 opacity-50" />
+                              </div>
+                            )}
+                            <div className="space-y-0.5 min-w-0">
+                              <p className="font-semibold text-sm text-foreground truncate max-w-[220px]" title={product.name}>
+                                {product.name}
+                              </p>
+                              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                <span className="font-mono text-[11px] truncate max-w-[120px]">{product.slug}</span>
+                                {product.categoryName && (
+                                  <>
+                                    <span>•</span>
+                                    <span className="text-[11px] font-medium text-primary">{product.categoryName}</span>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell className="font-medium">
+                          {new Intl.NumberFormat("tr-TR", {
+                            style: "currency",
+                            currency: "TRY",
+                          }).format(product.basePrice)}
+                        </TableCell>
+                        <TableCell>
+                          {product.discountPrice ? (
+                            <span className="text-emerald-600 dark:text-emerald-400 font-semibold">
+                              {new Intl.NumberFormat("tr-TR", {
+                                style: "currency",
+                                currency: "TRY",
+                              }).format(product.discountPrice)}
+                            </span>
+                          ) : (
                             <span className="text-muted-foreground text-xs">—</span>
                           )}
-                        </div>
-                      </TableCell>
-                      <TableCell>{product.displayOrder}</TableCell>
-                      {role !== "VIEWER" && (
-                        <TableCell className="text-right">
-                          <Link href={`/admin/products/${product.id}`}>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="text-primary hover:text-primary hover:bg-primary/10 h-8 w-8"
-                              title="Detay & Düzenle"
-                            >
-                              <Eye className="h-4 w-4" />
-                            </Button>
-                          </Link>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="text-destructive hover:text-destructive hover:bg-destructive/10 h-8 w-8"
-                            onClick={() => setProductToDelete(product)}
-                            title="Sil"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
                         </TableCell>
-                      )}
-                    </TableRow>
-                  ))
+                        <TableCell>
+                          <button
+                            type="button"
+                            onClick={() => setStockModalProductId(product.id)}
+                            className="group inline-flex items-center gap-1.5 cursor-pointer text-left focus:outline-none"
+                            title="Hızlı Stok Yönetimi & Ekle"
+                          >
+                            <Badge
+                              variant="outline"
+                              className={`font-mono text-xs font-bold gap-1 py-1 px-2.5 transition-all group-hover:ring-1 group-hover:ring-primary/40 ${
+                                totalStock === 0
+                                  ? "bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-500/30"
+                                  : totalStock < 10
+                                  ? "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/30"
+                                  : "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30"
+                              }`}
+                            >
+                              <Boxes className="h-3 w-3 shrink-0" />
+                              {totalStock === 0 ? "Tükendi (0)" : `${totalStock} Adet`}
+                            </Badge>
+                            <PackagePlus className="h-3.5 w-3.5 text-muted-foreground opacity-60 group-hover:opacity-100 group-hover:text-primary transition-all" />
+                          </button>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex gap-1.5 flex-wrap">
+                            {product.isFeatured && (
+                              <Badge variant="outline" className="text-[11px] font-semibold bg-amber-50 text-amber-800 border-amber-300 shadow-2xs">
+                                ★ Öne Çıkan
+                              </Badge>
+                            )}
+                            {product.isBestSeller && (
+                              <Badge variant="outline" className="text-[11px] font-semibold bg-rose-50 text-rose-800 border-rose-300 shadow-2xs">
+                                🔥 Çok Satan
+                              </Badge>
+                            )}
+                            {product.isNewArrival && (
+                              <Badge variant="outline" className="text-[11px] font-semibold bg-indigo-50 text-indigo-800 border-indigo-300 shadow-2xs">
+                                ✨ Yeni Gelen
+                              </Badge>
+                            )}
+                            {!product.isFeatured && !product.isBestSeller && !product.isNewArrival && (
+                              <span className="text-muted-foreground text-xs">—</span>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell className="font-mono text-xs">{product.displayOrder}</TableCell>
+                        {role !== "VIEWER" && (
+                          <TableCell className="text-right">
+                            <div className="flex items-center justify-end gap-1">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="text-amber-600 hover:text-amber-700 hover:bg-amber-50 dark:hover:bg-amber-950/30 h-8 w-8"
+                                onClick={() => setStockModalProductId(product.id)}
+                                title="Hızlı Stok Ekle & Yönet"
+                              >
+                                <PackagePlus className="h-4 w-4" />
+                              </Button>
+                              <Link href={`/admin/products/${product.id}`}>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="text-primary hover:text-primary hover:bg-primary/10 h-8 w-8"
+                                  title="Detay & Düzenle"
+                                >
+                                  <Eye className="h-4 w-4" />
+                                </Button>
+                              </Link>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="text-destructive hover:text-destructive hover:bg-destructive/10 h-8 w-8"
+                                onClick={() => setProductToDelete(product)}
+                                title="Sil"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        )}
+                      </TableRow>
+                    );
+                  })
                 )}
               </TableBody>
             </Table>
@@ -337,6 +409,15 @@ export default function ProductsPage() {
           )}
         </div>
       )}
+
+      {/* Quick Stock Dialog */}
+      <QuickStockDialog
+        productId={stockModalProductId}
+        open={!!stockModalProductId}
+        onOpenChange={(open) => {
+          if (!open) setStockModalProductId(null);
+        }}
+      />
 
       {/* Wizard Dialog */}
       <ProductWizardDialog

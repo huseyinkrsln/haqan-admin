@@ -36,11 +36,29 @@ function processQueue(error: unknown, token: string | null) {
   failedQueue = [];
 }
 
+let cachedSession: any = null;
+let lastSessionFetch = 0;
+const SESSION_CACHE_TTL = 60 * 1000; // 1 dakika
+
+async function getCachedSession() {
+  const now = Date.now();
+  if (cachedSession !== null && now - lastSessionFetch < SESSION_CACHE_TTL) {
+    return cachedSession;
+  }
+  try {
+    cachedSession = await getSession();
+    lastSessionFetch = now;
+  } catch {
+    cachedSession = null;
+  }
+  return cachedSession;
+}
+
 // ─── Request Interceptor ──────────────────────────────────────────────────────
 
 axiosInstance.interceptors.request.use(
   async (config: InternalAxiosRequestConfig) => {
-    const session = await getSession();
+    const session = await getCachedSession();
     const token = (session as any)?.accessToken;
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
