@@ -151,7 +151,6 @@ const DEFAULT_PRESETS: SiteSettingBulkItemDto[] = [
   // E-Ticaret & Kargo
   { settingKey: "FreeShippingThreshold", settingValue: "1500", groupKey: "Commerce", description: "Ücretsiz kargo uygulanması için minimum sepet tutarı (₺)" },
   { settingKey: "FlatShippingRate", settingValue: "79.90", groupKey: "Commerce", description: "Standart sabit kargo gönderim ücreti (₺)" },
-  { settingKey: "CurrencySymbol", settingValue: "₺", groupKey: "Commerce", description: "Fiyat gösteriminde kullanılacak para birimi sembolü" },
   { settingKey: "TaxRatePercent", settingValue: "10", groupKey: "Commerce", description: "Fiyatlara dahil standart KDV oranı (%)" },
 
   // Banner & Duyuru
