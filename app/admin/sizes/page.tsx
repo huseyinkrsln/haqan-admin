@@ -13,7 +13,8 @@ import {
   Tag, 
   RotateCw,
   Sparkles,
-  Info
+  Info,
+  AlertTriangle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useSession } from "next-auth/react";
@@ -98,6 +99,13 @@ export default function SizesPage() {
   const [groupToDelete, setGroupToDelete] = useState<SizeGroup | null>(null);
   const [sizeToDelete, setSizeToDelete] = useState<Size | null>(null);
 
+  const sizesInGroupToDelete = useMemo(() => {
+    if (!groupToDelete) return [];
+    return allSizes.filter((s) => s.sizeGroupId === groupToDelete.id);
+  }, [groupToDelete, allSizes]);
+
+  const hasSizesInGroup = sizesInGroupToDelete.length > 0;
+
   // Stats calculation
   const totalGroups = sizeGroups.length;
   const totalSizes = useMemo(() => {
@@ -146,7 +154,10 @@ export default function SizesPage() {
             toast.success("Beden grubu güncellendi.");
             setGroupDialogOpen(false);
           },
-          onError: () => toast.error("Beden grubu güncellenirken hata oluştu."),
+          onError: (err: any) => {
+            const msg = err.response?.data?.message || err.response?.data || err.message || "Beden grubu güncellenirken hata oluştu.";
+            toast.error(typeof msg === "string" ? msg : "Beden grubu güncellenirken hata oluştu.");
+          },
         }
       );
     } else {
@@ -157,7 +168,10 @@ export default function SizesPage() {
             toast.success("Beden grubu başarıyla eklendi.");
             setGroupDialogOpen(false);
           },
-          onError: () => toast.error("Beden grubu eklenirken hata oluştu."),
+          onError: (err: any) => {
+            const msg = err.response?.data?.message || err.response?.data || err.message || "Beden grubu eklenirken hata oluştu.";
+            toast.error(typeof msg === "string" ? msg : "Beden grubu eklenirken hata oluştu.");
+          },
         }
       );
     }
@@ -170,9 +184,9 @@ export default function SizesPage() {
         toast.success("Beden grubu silindi.");
         setGroupToDelete(null);
       },
-      onError: () => {
-        toast.error("Beden grubu silinirken hata oluştu.");
-        setGroupToDelete(null);
+      onError: (err: any) => {
+        const msg = err.response?.data?.message || err.response?.data || err.message || "Beden grubu silinirken hata oluştu.";
+        toast.error(typeof msg === "string" ? msg : "Beden grubu silinirken hata oluştu.");
       },
     });
   };
@@ -215,7 +229,10 @@ export default function SizesPage() {
             toast.success("Beden güncellendi.");
             setSizeDialogOpen(false);
           },
-          onError: () => toast.error("Beden güncellenirken hata oluştu."),
+          onError: (err: any) => {
+            const msg = err.response?.data?.message || err.response?.data || err.message || "Beden güncellenirken hata oluştu.";
+            toast.error(typeof msg === "string" ? msg : "Beden güncellenirken hata oluştu.");
+          },
         }
       );
     } else {
@@ -229,7 +246,10 @@ export default function SizesPage() {
             toast.success("Beden başarıyla eklendi.");
             setSizeDialogOpen(false);
           },
-          onError: () => toast.error("Beden eklenirken hata oluştu."),
+          onError: (err: any) => {
+            const msg = err.response?.data?.message || err.response?.data || err.message || "Beden eklenirken hata oluştu.";
+            toast.error(typeof msg === "string" ? msg : "Beden eklenirken hata oluştu.");
+          },
         }
       );
     }
@@ -242,9 +262,9 @@ export default function SizesPage() {
         toast.success("Beden silindi.");
         setSizeToDelete(null);
       },
-      onError: () => {
-        toast.error("Beden silinirken hata oluştu.");
-        setSizeToDelete(null);
+      onError: (err: any) => {
+        const msg = err.response?.data?.message || err.response?.data || err.message || "Beden silinirken hata oluştu.";
+        toast.error(typeof msg === "string" ? msg : "Beden silinirken hata oluştu.");
       },
     });
   };
@@ -640,21 +660,50 @@ export default function SizesPage() {
           if (!deleteGroupMutation.isPending && !open) setGroupToDelete(null);
         }}
       >
-        <AlertDialogContent>
+        <AlertDialogContent className="sm:max-w-md">
           <AlertDialogHeader>
-            <AlertDialogTitle>Bu beden grubunu silmek istediğinize emin misiniz?</AlertDialogTitle>
+            <AlertDialogTitle className="flex items-center gap-2 text-rose-600">
+              <AlertTriangle className="h-5 w-5" />
+              Beden Grubunu Sil
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              &quot;{groupToDelete?.name}&quot; grubu ve gruba bağlı bedenler kaldırılacaktır.
+              <strong>&quot;{groupToDelete?.name}&quot;</strong> beden grubunu silmek üzeresiniz.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={deleteGroupMutation.isPending}>İptal</AlertDialogCancel>
+
+          {hasSizesInGroup ? (
+            <div className="p-3.5 bg-amber-500/10 border border-amber-500/30 rounded-lg text-xs text-amber-900 dark:text-amber-200 space-y-2 my-1">
+              <div className="font-semibold flex items-center gap-1.5 text-amber-700 dark:text-amber-400">
+                <AlertTriangle className="h-4 w-4 shrink-0" />
+                <span>Bu gruba bağlı {sizesInGroupToDelete.length} adet beden bulunmaktadır:</span>
+              </div>
+              <div className="flex flex-wrap gap-1.5 pt-1">
+                {sizesInGroupToDelete.map((s) => (
+                  <span key={s.id} className="px-2 py-0.5 bg-white/80 dark:bg-zinc-800 border border-amber-500/20 rounded font-medium text-foreground text-[11px]">
+                    {s.name}
+                  </span>
+                ))}
+              </div>
+              <p className="text-[11px] text-muted-foreground pt-1 border-t border-amber-500/20">
+                İçinde beden tanımlı olan beden grupları doğrudan silinemez. Silme işlemi yapabilmek için önce bu gruba ait bedenleri silmeli veya başka bir gruba taşımalısınız.
+              </p>
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground my-1">
+              Bu işlem beden grubunu sistemden kaldıracaktır. Bu işlem geri alınamaz.
+            </p>
+          )}
+
+          <AlertDialogFooter className="gap-2 sm:gap-0 mt-2">
+            <AlertDialogCancel disabled={deleteGroupMutation.isPending}>
+              {hasSizesInGroup ? "Kapat" : "İptal"}
+            </AlertDialogCancel>
             <AlertDialogAction
               onClick={(e) => {
                 e.preventDefault();
                 handleDeleteGroup();
               }}
-              disabled={deleteGroupMutation.isPending}
+              disabled={deleteGroupMutation.isPending || hasSizesInGroup}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               {deleteGroupMutation.isPending ? (
@@ -677,14 +726,20 @@ export default function SizesPage() {
           if (!deleteSizeMutation.isPending && !open) setSizeToDelete(null);
         }}
       >
-        <AlertDialogContent>
+        <AlertDialogContent className="sm:max-w-md">
           <AlertDialogHeader>
-            <AlertDialogTitle>Bu bedeni silmek istediğinize emin misiniz?</AlertDialogTitle>
+            <AlertDialogTitle className="flex items-center gap-2 text-rose-600">
+              <AlertTriangle className="h-5 w-5" />
+              Bedeni Sil
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              &quot;{sizeToDelete?.name}&quot; bedeni kalıcı olarak silinecek.
+              <strong>&quot;{sizeToDelete?.name}&quot;</strong> bedenini silmek üzeresiniz.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter>
+          <p className="text-xs text-muted-foreground my-1">
+            Bu işlem bedeni sistemden kaldıracaktır. Eğer bu bedene bağlı ürün varyantları varsa silme işlemi engellenecektir.
+          </p>
+          <AlertDialogFooter className="gap-2 sm:gap-0 mt-2">
             <AlertDialogCancel disabled={deleteSizeMutation.isPending}>İptal</AlertDialogCancel>
             <AlertDialogAction
               onClick={(e) => {
