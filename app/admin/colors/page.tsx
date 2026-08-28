@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { ColumnDef } from "@tanstack/react-table";
 import Link from "next/link";
-import { Plus, Edit, Trash2 } from "lucide-react";
+import { Plus, Edit, Trash2, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { useSession } from "next-auth/react";
 
@@ -76,7 +76,10 @@ export default function ColorsPage() {
           toast.success("Renk güncellendi.");
           setDialogOpen(false);
         },
-        onError: () => toast.error("Renk güncellenirken hata oluştu.")
+        onError: (err: any) => {
+          const msg = err.response?.data?.message || err.response?.data || err.message || "Renk güncellenirken hata oluştu.";
+          toast.error(typeof msg === "string" ? msg : "Renk güncellenirken hata oluştu.");
+        }
       });
     } else {
       createMutation.mutate(data as CreateColorDto, {
@@ -84,7 +87,10 @@ export default function ColorsPage() {
           toast.success("Renk başarıyla eklendi.");
           setDialogOpen(false);
         },
-        onError: () => toast.error("Renk eklenirken hata oluştu.")
+        onError: (err: any) => {
+          const msg = err.response?.data?.message || err.response?.data || err.message || "Renk eklenirken hata oluştu.";
+          toast.error(typeof msg === "string" ? msg : "Renk eklenirken hata oluştu.");
+        }
       });
     }
   };
@@ -95,8 +101,9 @@ export default function ColorsPage() {
         toast.success("Renk silindi.");
         setToDelete(null);
       },
-      onError: () => {
-        toast.error("Renk silinirken hata oluştu.");
+      onError: (err: any) => {
+        const msg = err.response?.data?.message || err.response?.data || err.message || "Renk silinirken hata oluştu.";
+        toast.error(typeof msg === "string" ? msg : "Renk silinirken hata oluştu.");
         setToDelete(null);
       }
     });
@@ -209,14 +216,20 @@ export default function ColorsPage() {
           if (!deleteMutation.isPending && !open) setToDelete(null);
         }}
       >
-        <AlertDialogContent>
+        <AlertDialogContent className="sm:max-w-md">
           <AlertDialogHeader>
-            <AlertDialogTitle>Bu rengi silmek istediğinize emin misiniz?</AlertDialogTitle>
+            <AlertDialogTitle className="flex items-center gap-2 text-rose-600">
+              <AlertTriangle className="h-5 w-5" />
+              Rengi Sil
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              &quot;{toDelete?.name}&quot; rengi kalıcı olarak silinecek. Bu işlem geri alınamaz.
+              <strong>&quot;{toDelete?.name}&quot;</strong> rengini silmek üzeresiniz.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter>
+          <p className="text-xs text-muted-foreground my-1">
+            Bu işlem rengi sistemden kaldıracaktır. Eğer bu renge bağlı ürünler bulunuyorsa silme işlemi engellenecektir.
+          </p>
+          <AlertDialogFooter className="gap-2 sm:gap-0 mt-2">
             <AlertDialogCancel disabled={deleteMutation.isPending}>İptal</AlertDialogCancel>
             <AlertDialogAction
               onClick={(e) => { e.preventDefault(); if (toDelete) handleDelete(toDelete.id); }}
@@ -225,7 +238,7 @@ export default function ColorsPage() {
             >
               {deleteMutation.isPending ? (
                 <><Spinner size="sm" className="mr-2" />Siliniyor...</>
-              ) : "Evet, Sil"}
+              ) : "Evet, Rengi Sil"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
