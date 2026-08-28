@@ -32,17 +32,17 @@ export function ShippingCarrierDialog({
   onSubmit,
 }: ShippingCarrierDialogProps) {
   const [name, setName] = useState("");
-  const [basePrice, setBasePrice] = useState<number>(0);
+  const [basePrice, setBasePrice] = useState<number | string>("");
   const [trackingUrlTemplate, setTrackingUrlTemplate] = useState("");
 
   useEffect(() => {
     if (initialData) {
       setName(initialData.name || "");
-      setBasePrice(initialData.basePrice || 0);
+      setBasePrice(initialData.basePrice !== undefined ? initialData.basePrice : "");
       setTrackingUrlTemplate(initialData.trackingUrlTemplate || "");
     } else {
       setName("");
-      setBasePrice(0);
+      setBasePrice("");
       setTrackingUrlTemplate("");
     }
   }, [initialData, open]);
@@ -51,7 +51,7 @@ export function ShippingCarrierDialog({
     e.preventDefault();
     const payload: any = {
       name: name.trim(),
-      basePrice: Number(basePrice),
+      basePrice: Number(basePrice) || 0,
       trackingUrlTemplate: trackingUrlTemplate.trim() || undefined,
     };
 
@@ -96,7 +96,8 @@ export function ShippingCarrierDialog({
               min={0}
               placeholder="0.00"
               value={basePrice}
-              onChange={(e) => setBasePrice(Number(e.target.value))}
+              onChange={(e) => setBasePrice(e.target.value)}
+              className="h-9 text-center text-sm font-mono font-bold"
             />
           </div>
 

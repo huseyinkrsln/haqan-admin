@@ -21,6 +21,7 @@ import { useCategories } from "@/hooks/useCategories";
 import { useBrands } from "@/hooks/useBrands";
 import { useFeatures } from "@/hooks/useFeatures";
 import { useProductGroups } from "@/hooks/useProductGroups";
+import { checkBarcodes } from "@/hooks/useProducts";
 import {
   CreateComplexProductDto,
   ProductVariantCreateDto,
@@ -39,6 +40,10 @@ import {
   Plus,
   Trash2,
   Image as ImageIcon,
+  AlertCircle,
+  ShieldCheck,
+  Zap,
+  CheckCheck,
 } from "lucide-react";
 
 function formatCategoryBreadcrumb(category: any, allCategories: any[] = []): string {
@@ -75,15 +80,13 @@ interface ProductWizardDialogProps {
   isPending?: boolean;
 }
 
-// ─── Types ───────────────────────────────────────────────────────────────────
-
 interface VariantRow {
   colorId: number;
   colorName: string;
   sizeId: number;
   sizeName: string;
-  stockQuantity: number;
-  priceDifference: number;
+  stockQuantity: number | string;
+  priceDifference: number | string;
   sku: string;
   barcode: string;
 }
@@ -165,8 +168,8 @@ export function ProductWizardDialog({
             colorName: color?.name || "",
             sizeId,
             sizeName: size?.name || "",
-            stockQuantity: 0,
-            priceDifference: 0,
+            stockQuantity: "",
+            priceDifference: "",
             sku: "",
             barcode: "",
           }
@@ -174,6 +177,42 @@ export function ProductWizardDialog({
       }
     }
     setVariantRows(rows);
+  };
+
+  const [barcodeErrors, setBarcodeErrors] = useState<Record<number, string>>({});
+  const [isValidatingBarcodes, setIsValidatingBarcodes] = useState(false);
+  const [bulkStock, setBulkStock] = useState<string | number>("");
+  const [bulkPriceDiff, setBulkPriceDiff] = useState<string | number>("");
+
+  const handleApplyBulkStock = () => {
+    if (bulkStock === "" && bulkPriceDiff === "") {
+      toast.info("Lütfen uygulanacak bir stok veya fiyat farkı değeri girin.");
+      return;
+    }
+    setVariantRows((prev) =>
+      prev.map((row) => ({
+        ...row,
+        stockQuantity: bulkStock !== "" ? bulkStock : row.stockQuantity,
+        priceDifference: bulkPriceDiff !== "" ? bulkPriceDiff : row.priceDifference,
+      }))
+    );
+    toast.success("Değerler tüm varyantlara uygulandı.");
+  };
+
+  const updateVariantRow = (idx: number, field: keyof VariantRow, value: any) => {
+    setVariantRows((prev) => {
+      const next = [...prev];
+      next[idx] = { ...next[idx], [field]: value };
+      return next;
+    });
+
+    if (field === "barcode" && barcodeErrors[idx]) {
+      setBarcodeErrors((prev) => {
+        const next = { ...prev };
+        delete next[idx];
+        return next;
+      });
+    }
   };
 
   // Step 4 -> Step 5: Renk bazlı görsel satırlarını oluştur (eğer yoksa)
@@ -196,9 +235,84 @@ export function ProductWizardDialog({
     setImageRows(newRows);
   };
 
-  const handleNext = () => {
-    if (step === 3) buildVariantRows();
-    if (step === 4) buildImageRows();
+  const handleNext = async () => {
+    if (step === 3) {
+      buildVariantRows();
+      setBarcodeErrors({});
+      setStep(4);
+      return;
+    }
+
+    if (step === 4) {
+      // 1. Boş Barkod Kontrolü
+      const errors: Record<number, string> = {};
+      const trimmedBarcodes: { index: number; barcode: string }[] = [];
+
+      variantRows.forEach((row, idx) => {
+        const b = typeof row.barcode === "string" ? row.barcode.trim() : "";
+        if (!b) {
+          errors[idx] = "Barkod girilmesi zorunludur";
+        } else {
+          trimmedBarcodes.push({ index: idx, barcode: b });
+        }
+      });
+
+      if (Object.keys(errors).length > 0) {
+        setBarcodeErrors(errors);
+        toast.error("Lütfen tüm varyantlar için barkod giriniz.");
+        return;
+      }
+
+      // 2. Form İçi Duplicate Kontrolü
+      const counts: Record<string, number[]> = {};
+      trimmedBarcodes.forEach(({ index, barcode }) => {
+        if (!counts[barcode]) counts[barcode] = [];
+        counts[barcode].push(index);
+      });
+
+      let hasDuplicate = false;
+      Object.entries(counts).forEach(([barcode, indices]) => {
+        if (indices.length > 1) {
+          hasDuplicate = true;
+          indices.forEach((idx) => {
+            errors[idx] = "Aynı barkodu birden fazla varyantta kullanamazsınız";
+          });
+        }
+      });
+
+      if (hasDuplicate) {
+        setBarcodeErrors(errors);
+        toast.error("Aynı barkod numarası birden fazla varyantta kullanılamaz.");
+        return;
+      }
+
+      // 3. Backend Veritabanı Benzersizlik Kontrolü
+      try {
+        setIsValidatingBarcodes(true);
+        const existingInDb = await checkBarcodes(trimmedBarcodes.map((t) => t.barcode));
+        if (existingInDb && existingInDb.length > 0) {
+          trimmedBarcodes.forEach(({ index, barcode }) => {
+            if (existingInDb.includes(barcode)) {
+              errors[index] = "Bu barkod sistemde zaten kayıtlı";
+            }
+          });
+          setBarcodeErrors(errors);
+          toast.error("Girdiğiniz bazı barkodlar sistemde zaten kayıtlı. Lütfen değiştirin.");
+          return;
+        }
+      } catch (err: any) {
+        toast.error("Barkod kontrolü yapılırken bir hata oluştu: " + (err.response?.data?.message || err.message));
+        return;
+      } finally {
+        setIsValidatingBarcodes(false);
+      }
+
+      setBarcodeErrors({});
+      buildImageRows();
+      setStep(5);
+      return;
+    }
+
     setStep((s) => Math.min(5, s + 1));
   };
 
@@ -206,13 +320,14 @@ export function ProductWizardDialog({
 
   const handleReset = () => {
     setStep(1);
-    setName(""); setDescription(""); setCategoryId(""); setProductGroupId(""); setBrandId(""); setDisplayOrder(0);
+    setName(""); setDescription(""); setCategoryId(""); setProductGroupId(""); setBrandId(""); setDisplayOrder("");
     setBasePrice(""); setDiscountPrice("");
     setIsFeatured(false); setIsBestSeller(false); setIsNewArrival(false);
     setFeatureIds([]);
     setSelectedColorIds([]); setSizesByColor({});
     setWizardSizeGroupId(null);
     setVariantRows([]); setImageRows([]);
+    setBarcodeErrors({});
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -260,10 +375,10 @@ export function ProductWizardDialog({
         variants: variantRows.map((r) => ({
           colorId: r.colorId,
           sizeId: r.sizeId,
-          sku: r.sku,
-          barcode: r.barcode,
-          stockQuantity: Number(r.stockQuantity),
-          priceDifference: Number(r.priceDifference),
+          sku: r.sku?.trim() || undefined,
+          barcode: r.barcode?.trim() || undefined,
+          stockQuantity: Number(r.stockQuantity) || 0,
+          priceDifference: Number(r.priceDifference) || 0,
         })),
         images: processedImageRows.map((r) => ({
           colorId: r.colorId,
@@ -313,13 +428,13 @@ export function ProductWizardDialog({
     }));
   };
 
-  const updateVariantRow = (idx: number, field: keyof VariantRow, value: any) => {
-    setVariantRows((prev) => {
-      const next = [...prev];
-      next[idx] = { ...next[idx], [field]: value };
-      return next;
-    });
-  };
+  // const updateVariantRow = (idx: number, field: keyof VariantRow, value: any) => {
+  //   setVariantRows((prev) => {
+  //     const next = [...prev];
+  //     next[idx] = { ...next[idx], [field]: value };
+  //     return next;
+  //   });
+  // };
 
   const addImageRow = (colorId: number) => {
     const color = colorsData.find((c: Color) => c.id === colorId);
@@ -477,7 +592,7 @@ export function ProductWizardDialog({
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="p-order">Görüntülenme Sıralaması</Label>
-              <Input id="p-order" type="number" value={displayOrder} onChange={(e) => setDisplayOrder(Number(e.target.value))} placeholder="0" />
+              <Input id="p-order" type="number" min="0" value={displayOrder} onChange={(e) => setDisplayOrder(e.target.value)} placeholder="0" className="h-9 w-28 text-center text-xs font-mono font-bold" />
             </div>
           </div>
         )}
@@ -759,7 +874,54 @@ export function ProductWizardDialog({
         {/* ── STEP 4: Stok & SKU ── */}
         {step === 4 && (
           <div className="space-y-3">
-            <p className="text-sm text-muted-foreground">Her renk/beden kombinasyonu için stok ve kod bilgilerini girin.</p>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <p className="text-sm text-muted-foreground">Her renk/beden kombinasyonu için stok ve kod bilgilerini girin.</p>
+            </div>
+
+            {/* Hızlı Toplu Değer Doldurma Çubuğu */}
+            <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 bg-slate-50 border border-slate-200/80 rounded-xl shadow-2xs">
+              <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-700">
+                <Zap className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
+                <span>Hızlı Toplu Doldur:</span>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] text-muted-foreground font-medium">Stok:</span>
+                  <Input
+                    type="number"
+                    min="0"
+                    placeholder="Tümü..."
+                    value={bulkStock}
+                    onChange={(e) => setBulkStock(e.target.value)}
+                    className="h-7.5 w-24 text-center text-xs font-mono font-bold bg-white"
+                  />
+                </div>
+
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] text-muted-foreground font-medium">Fiyat Farkı:</span>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    placeholder="0.00"
+                    value={bulkPriceDiff}
+                    onChange={(e) => setBulkPriceDiff(e.target.value)}
+                    className="h-7.5 w-24 text-center text-xs font-mono font-bold bg-white"
+                  />
+                </div>
+
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={handleApplyBulkStock}
+                  className="h-7.5 text-xs font-medium bg-white hover:bg-slate-100 text-slate-800 border-slate-300"
+                >
+                  <CheckCheck className="w-3.5 h-3.5 mr-1 text-emerald-600" /> Tümüne Uygula
+                </Button>
+              </div>
+            </div>
+
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
@@ -768,8 +930,8 @@ export function ProductWizardDialog({
                     <th className="text-left py-2 pr-3 font-medium">Beden</th>
                     <th className="text-left py-2 pr-3 font-medium">Stok</th>
                     <th className="text-left py-2 pr-3 font-medium">Fiyat Farkı (₺)</th>
-                    <th className="text-left py-2 pr-3 font-medium">SKU</th>
-                    <th className="text-left py-2 font-medium">Barkod</th>
+                    <th className="text-left py-2 pr-3 font-medium">SKU (Opsiyonel)</th>
+                    <th className="text-left py-2 font-medium">Barkod <span className="text-destructive">*</span></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -785,9 +947,10 @@ export function ProductWizardDialog({
                       <td className="py-2 pr-3">
                         <Input
                           type="number"
+                          placeholder="0"
                           value={row.stockQuantity}
-                          onChange={(e) => updateVariantRow(idx, "stockQuantity", Number(e.target.value))}
-                          className="h-7 w-20"
+                          onChange={(e) => updateVariantRow(idx, "stockQuantity", e.target.value)}
+                          className="h-8 w-20 text-center text-xs font-mono font-bold"
                           min={0}
                         />
                       </td>
@@ -795,26 +958,35 @@ export function ProductWizardDialog({
                         <Input
                           type="number"
                           step="0.01"
+                          placeholder="0"
                           value={row.priceDifference}
-                          onChange={(e) => updateVariantRow(idx, "priceDifference", Number(e.target.value))}
-                          className="h-7 w-24"
+                          onChange={(e) => updateVariantRow(idx, "priceDifference", e.target.value)}
+                          className="h-8 w-24 text-center text-xs font-mono font-bold"
                         />
                       </td>
                       <td className="py-2 pr-3">
                         <Input
                           value={row.sku}
                           onChange={(e) => updateVariantRow(idx, "sku", e.target.value)}
-                          className="h-7 w-28"
+                          className="h-7 w-28 text-xs font-mono"
                           placeholder="Otomatik"
                         />
                       </td>
                       <td className="py-2">
-                        <Input
-                          value={row.barcode}
-                          onChange={(e) => updateVariantRow(idx, "barcode", e.target.value)}
-                          className="h-7 w-28"
-                          placeholder="Otomatik"
-                        />
+                        <div className="space-y-0.5">
+                          <Input
+                            value={row.barcode}
+                            onChange={(e) => updateVariantRow(idx, "barcode", e.target.value)}
+                            className={`h-7 w-32 text-xs font-mono transition-colors ${
+                              barcodeErrors[idx] ? "border-destructive focus-visible:ring-destructive bg-rose-50/40 text-destructive" : ""
+                            }`}
+                            placeholder="Barkod No *"
+                            required
+                          />
+                          {barcodeErrors[idx] && (
+                            <p className="text-[10px] text-destructive font-medium leading-none mt-0.5">{barcodeErrors[idx]}</p>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -926,8 +1098,34 @@ export function ProductWizardDialog({
           </Button>
           <span className="text-xs text-muted-foreground">{step} / {STEPS.length}</span>
           {step < 5 ? (
-            <Button onClick={handleNext} disabled={!canGoNext()}>
-              İleri <ChevronRight className="w-4 h-4 ml-1" />
+            <Button
+              onClick={handleNext}
+              disabled={!canGoNext() || isValidatingBarcodes}
+              className={`transition-all font-semibold ${
+                step === 4 && Object.keys(barcodeErrors).length > 0
+                  ? "bg-rose-600 hover:bg-rose-700 text-white shadow-xs"
+                  : ""
+              }`}
+            >
+              {isValidatingBarcodes ? (
+                <>
+                  <Spinner className="mr-1.5" size="sm" /> Barkodlar Kontrol Ediliyor...
+                </>
+              ) : step === 4 ? (
+                Object.keys(barcodeErrors).length > 0 ? (
+                  <>
+                    <AlertCircle className="w-4 h-4 mr-1.5" /> Barkodları Düzeltin & Tekrar Dene
+                  </>
+                ) : (
+                  <>
+                    <ShieldCheck className="w-4 h-4 mr-1.5" /> Barkodları Doğrula & İleri
+                  </>
+                )
+              ) : (
+                <>
+                  İleri <ChevronRight className="w-4 h-4 ml-1" />
+                </>
+              )}
             </Button>
           ) : (
             <Button 

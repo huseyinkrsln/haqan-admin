@@ -224,19 +224,6 @@ export function CategoryProductGroupsDialog({
                       disabled={isPending}
                     />
                   </div>
-
-                  <div className="space-y-1">
-                    <Label htmlFor="pg-slug" className="text-xs">Slug (URL) *</Label>
-                    <Input
-                      id="pg-slug"
-                      placeholder="mini-etek"
-                      value={slug}
-                      onChange={(e) => setSlug(e.target.value)}
-                      required
-                      className="h-9 text-xs"
-                      disabled={isPending}
-                    />
-                  </div>
                 </div>
 
                 <div className="space-y-1">

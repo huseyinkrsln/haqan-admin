@@ -1,14 +1,12 @@
 import type { NextConfig } from "next";
 
+const allowedDevOrigins = process.env.ALLOWED_DEV_ORIGINS
+  ? process.env.ALLOWED_DEV_ORIGINS.split(",").map((s) => s.trim())
+  : undefined;
+
 const nextConfig: NextConfig = {
   // @ts-ignore
-  allowedDevOrigins: [
-    "192.168.1.111",
-    "192.168.1.111:3000",
-    "192.168.1.111:3001",
-    "localhost:3000",
-    "localhost:3001",
-  ],
+  allowedDevOrigins: allowedDevOrigins,
   images: {
     dangerouslyAllowLocalIP: true,
     unoptimized: true,

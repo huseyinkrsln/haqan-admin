@@ -25,13 +25,7 @@ interface CategoryDialogProps {
   onSubmit: (data: any) => void;
 }
 
-const MINIO_URL = process.env.NEXT_PUBLIC_MINIO_URL || "http://127.0.0.1:9000";
-
-function getMinioUrl(path?: string) {
-  if (!path) return "";
-  if (path.startsWith("http")) return path;
-  return `${MINIO_URL}${path.startsWith("/") ? "" : "/"}${path}`;
-}
+import { getMinioUrl } from "@/lib/utils";
 
 export function CategoryDialog({
   open,
@@ -109,18 +103,6 @@ export function CategoryDialog({
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="Örn: Erkek Giyim"
-              required
-              disabled={isPending}
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="c-slug">Slug (URL) *</Label>
-            <Input
-              id="c-slug"
-              value={slug}
-              onChange={(e) => setSlug(e.target.value)}
-              placeholder="erkek-giyim"
               required
               disabled={isPending}
             />

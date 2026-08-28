@@ -41,8 +41,8 @@ export function CouponDialog({
 }: CouponDialogProps) {
   const [code, setCode] = useState("");
   const [discountType, setDiscountType] = useState<string>("Percentage");
-  const [value, setValue] = useState<number>(10);
-  const [minOrderAmount, setMinOrderAmount] = useState<number>(0);
+  const [value, setValue] = useState<number | string>(10);
+  const [minOrderAmount, setMinOrderAmount] = useState<number | string>(0);
   const [startDate, setStartDate] = useState<string>("");
   const [endDate, setEndDate] = useState<string>("");
   const [usageLimit, setUsageLimit] = useState<string>("");
@@ -147,8 +147,10 @@ export function CouponDialog({
                 type="number"
                 min={1}
                 max={discountType === "Percentage" ? 100 : 999999}
+                placeholder="0"
                 value={value}
-                onChange={(e) => setValue(Number(e.target.value))}
+                onChange={(e) => setValue(e.target.value)}
+                className="h-9 text-center text-sm font-mono font-bold"
                 required
               />
             </div>
@@ -163,7 +165,8 @@ export function CouponDialog({
                 min={0}
                 placeholder="0 (Alt limit yok)"
                 value={minOrderAmount}
-                onChange={(e) => setMinOrderAmount(Number(e.target.value))}
+                onChange={(e) => setMinOrderAmount(e.target.value)}
+                className="h-9 text-center text-sm font-mono font-bold"
               />
             </div>
 
@@ -173,9 +176,10 @@ export function CouponDialog({
                 id="usageLimit"
                 type="number"
                 min={1}
-                placeholder="Boş bırakılırsa sınırsız"
+                placeholder="Sınırsız"
                 value={usageLimit}
                 onChange={(e) => setUsageLimit(e.target.value)}
+                className="h-9 text-center text-sm font-mono font-bold"
               />
             </div>
           </div>

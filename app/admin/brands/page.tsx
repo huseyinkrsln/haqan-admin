@@ -23,15 +23,7 @@ import {
   Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList,
   BreadcrumbPage, BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
-import { getApiErrorMessage } from "@/lib/utils";
-
-const MINIO_URL = process.env.NEXT_PUBLIC_MINIO_URL || "http://127.0.0.1:9000";
-
-function getMinioUrl(path?: string) {
-  if (!path) return "";
-  if (path.startsWith("http")) return path;
-  return `${MINIO_URL}${path.startsWith("/") ? "" : "/"}${path}`;
-}
+import { getApiErrorMessage, getMinioUrl } from "@/lib/utils";
 
 export default function BrandsPage() {
   const searchParams = useSearchParams();

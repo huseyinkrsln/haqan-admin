@@ -1,12 +1,16 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from "axios";
 import { getSession, signOut } from "next-auth/react";
 
-// Backend base URL — network adresine göre
 const BACKEND_URL =
-  process.env.NEXT_PUBLIC_BACKEND_URL || "http://192.168.1.108:5000";
+  process.env.NEXT_PUBLIC_BACKEND_URL ||
+  process.env.BACKEND_URL ||
+  "http://localhost:5000";
+
+export function getBackendUrl(): string {
+  return BACKEND_URL;
+}
 
 export const axiosInstance = axios.create({
-  baseURL: BACKEND_URL,
   timeout: 15000,
   headers: {
     "Content-Type": "application/json",
@@ -58,6 +62,7 @@ async function getCachedSession() {
 
 axiosInstance.interceptors.request.use(
   async (config: InternalAxiosRequestConfig) => {
+    config.baseURL = getBackendUrl();
     const session = await getCachedSession();
     const token = (session as any)?.accessToken;
     if (token) {
@@ -125,7 +130,7 @@ axiosInstance.interceptors.response.use(
         if (!refreshToken) throw new Error("No refresh token");
 
         const { data } = await axios.post(
-          `${BACKEND_URL}/api/v1/auth/refresh-token`,
+          `${getBackendUrl()}/api/v1/auth/refresh-token`,
           { refreshToken }
         );
 

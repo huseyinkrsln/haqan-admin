@@ -31,13 +31,7 @@ import {
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
 
-const MINIO_URL = process.env.NEXT_PUBLIC_MINIO_URL || "http://127.0.0.1:9000";
-
-function getMinioUrl(path?: string) {
-  if (!path) return "";
-  if (path.startsWith("http")) return path;
-  return `${MINIO_URL}${path.startsWith("/") ? "" : "/"}${path}`;
-}
+import { getMinioUrl } from "@/lib/utils";
 
 const movementConfig: Record<string, { label: string; color: string; icon: any }> = {
   in: { label: "Stok Girişi", color: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20", icon: ArrowDownLeft },

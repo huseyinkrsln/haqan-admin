@@ -36,7 +36,7 @@ export function SliderDialog({
   const [subTitle, setSubTitle] = useState("");
   const [targetUrl, setTargetUrl] = useState("");
   const [buttonText, setButtonText] = useState("");
-  const [displayOrder, setDisplayOrder] = useState<number>(1);
+  const [displayOrder, setDisplayOrder] = useState<number | string>(1);
   const [startDate, setStartDate] = useState<string>("");
   const [endDate, setEndDate] = useState<string>("");
 
@@ -105,7 +105,7 @@ export function SliderDialog({
       subTitle: subTitle.trim(),
       targetUrl: targetUrl.trim(),
       buttonText: buttonText.trim(),
-      displayOrder: Number(displayOrder),
+      displayOrder: Number(displayOrder) || 1,
       startDate: startDate ? new Date(startDate).toISOString() : undefined,
       endDate: endDate ? new Date(endDate).toISOString() : undefined,
     };
@@ -270,8 +270,10 @@ export function SliderDialog({
                 id="displayOrder"
                 type="number"
                 min={1}
+                placeholder="1"
                 value={displayOrder}
-                onChange={(e) => setDisplayOrder(Number(e.target.value))}
+                onChange={(e) => setDisplayOrder(e.target.value)}
+                className="h-9 text-center text-sm font-mono font-bold"
               />
             </div>
 

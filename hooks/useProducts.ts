@@ -164,6 +164,16 @@ export function useAddProductVariant() {
   });
 }
 
+export async function checkBarcodes(barcodes: string[], excludeVariantId?: number): Promise<string[]> {
+  const clean = barcodes.filter((b) => b && b.trim() !== "");
+  if (clean.length === 0) return [];
+  const res = await axiosInstance.post<string[]>("/api/ProductVariants/check-barcodes", {
+    barcodes: clean,
+    excludeVariantId,
+  });
+  return Array.isArray(res.data) ? res.data : (res.data as any)?.data || [];
+}
+
 // ─── Görsel Hooks ─────────────────────────────────────────────────────────────
 
 export function useProductImagesByProductId(productId: number) {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
@@ -26,7 +26,10 @@ import {
   Clock,
   Layers,
   Check,
-  Pencil
+  Pencil,
+  ShieldCheck,
+  Zap,
+  CheckCheck,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -83,14 +86,18 @@ import {
   useDeleteProductImage,
   useUpdateProductImage,
   useAddProductColor,
+  checkBarcodes,
 } from "@/hooks/useProducts";
 import { useCategories } from "@/hooks/useCategories";
 import { useBrands } from "@/hooks/useBrands";
 import { useColors } from "@/hooks/useColors";
 import { useSizes } from "@/hooks/useSizes";
+import { useSizeGroups } from "@/hooks/useSizeGroups";
 import { useProductGroups } from "@/hooks/useProductGroups";
 import { useFeatures } from "@/hooks/useFeatures";
 import { UpdateProductDto } from "@/types/api.types";
+
+import { getMinioUrl } from "@/lib/utils";
 
 function formatCategoryBreadcrumb(category: any, allCategories: any[] = []): string {
   if (!category) return "";
@@ -113,14 +120,7 @@ function formatCategoryBreadcrumb(category: any, allCategories: any[] = []): str
 
 const getImageUrl = (url: string) => {
   if (!url) return "/placeholder-image.jpg";
-  if (url.startsWith("http")) return url;
-  
-  // Eğer url '/' ile başlıyorsa Minio bucket path'idir (örn: /backendbucket/...)
-  if (url.startsWith("/")) {
-    return `http://localhost:9000${url}`;
-  }
-  
-  return `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"}/Uploads/Images/${url}`;
+  return getMinioUrl(url);
 };
 
 export default function ProductDetailPage() {
@@ -146,12 +146,14 @@ export default function ProductDetailPage() {
   const { data: brandsData, isLoading: isBrandsLoading } = useBrands();
   const { data: globalColorsData } = useColors();
   const { data: globalSizesData } = useSizes();
+  const { data: sizeGroupsData } = useSizeGroups();
   const { data: allFeaturesData } = useFeatures();
 
   const categories = Array.isArray(categoriesData) ? categoriesData : (categoriesData as any)?.data || [];
   const brands = Array.isArray(brandsData) ? brandsData : (brandsData as any)?.data || [];
   const globalColors = Array.isArray(globalColorsData) ? globalColorsData : (globalColorsData as any)?.data || [];
   const globalSizes = Array.isArray(globalSizesData) ? globalSizesData : (globalSizesData as any)?.data || [];
+  const sizeGroups = Array.isArray(sizeGroupsData) ? sizeGroupsData : (sizeGroupsData as any)?.data || [];
   const allFeatures = Array.isArray(allFeaturesData) ? allFeaturesData : (allFeaturesData as any)?.data || [];
 
   const updateProductMutation = useUpdateProduct();
@@ -172,7 +174,7 @@ export default function ProductDetailPage() {
 
   // Varyantları inline düzenleme için state
   const [editingVariantId, setEditingVariantId] = useState<number | null>(null);
-  const [variantUpdates, setVariantUpdates] = useState<Record<number, { stockQuantity?: number; priceDifference?: number }>>({});
+  const [variantUpdates, setVariantUpdates] = useState<Record<number, { stockQuantity?: number | string; priceDifference?: number | string }>>({});
 
   // Image Upload & Management State
   const [isImageDialogOpen, setIsImageDialogOpen] = useState(false);
@@ -190,16 +192,37 @@ export default function ProductDetailPage() {
     isProductMain: false,
   });
 
-  // Variant Add State
+  // Batch Variant Add State
   const [isVariantDialogOpen, setIsVariantDialogOpen] = useState(false);
-  const [newVariant, setNewVariant] = useState({
-    globalColorId: "",
-    sizeId: "",
-    stockQuantity: 0,
-    priceDifference: 0,
-    sku: "",
-    barcode: ""
-  });
+  const [batchColorId, setBatchColorId] = useState<string | number>("");
+  const [batchSizeGroupId, setBatchSizeGroupId] = useState<number | null>(null);
+  const [batchBarcodeErrors, setBatchBarcodeErrors] = useState<Record<number, string>>({});
+  const [isSubmittingBatch, setIsSubmittingBatch] = useState(false);
+  const [batchBulkStock, setBatchBulkStock] = useState<string | number>("");
+  const [batchBulkPriceDiff, setBatchBulkPriceDiff] = useState<string | number>("");
+  const [batchRows, setBatchRows] = useState<{
+    sizeId: number;
+    sizeName: string;
+    stockQuantity: string | number;
+    priceDifference: string | number;
+    sku: string;
+    barcode: string;
+  }[]>([]);
+
+  const handleApplyBatchBulkStock = () => {
+    if (batchBulkStock === "" && batchBulkPriceDiff === "") {
+      toast.info("Lütfen uygulanacak bir stok veya fiyat farkı değeri girin.");
+      return;
+    }
+    setBatchRows((prev) =>
+      prev.map((row) => ({
+        ...row,
+        stockQuantity: batchBulkStock !== "" ? batchBulkStock : row.stockQuantity,
+        priceDifference: batchBulkPriceDiff !== "" ? batchBulkPriceDiff : row.priceDifference,
+      }))
+    );
+    toast.success("Değerler tüm seçili varyantlara uygulandı.");
+  };
 
   useEffect(() => {
     if (product) {
@@ -252,8 +275,8 @@ export default function ProductDetailPage() {
     updateProductVariantMutation.mutate({ 
       id: variantId, 
       ...originalData,
-      stockQuantity: current.stockQuantity ?? originalData.stockQuantity,
-      priceDifference: current.priceDifference ?? originalData.priceDifference
+      stockQuantity: current.stockQuantity !== undefined && current.stockQuantity !== "" ? Number(current.stockQuantity) : originalData.stockQuantity,
+      priceDifference: current.priceDifference !== undefined && current.priceDifference !== "" ? Number(current.priceDifference) : originalData.priceDifference
     }, {
       onSuccess: () => {
         toast.success("Varyant güncellendi");
@@ -270,22 +293,155 @@ export default function ProductDetailPage() {
     });
   };
 
-  const handleAddVariant = async (e: React.FormEvent) => {
+  // Mevcut ürün rengindeki varyant size ID'leri (çift eklemeyi önlemek için)
+  const existingVariantSizeIds = useMemo(() => {
+    if (!batchColorId) return [];
+    const pc = productColors.find((p: any) => p.colorId === Number(batchColorId));
+    if (!pc) return [];
+    return variants
+      .filter((v: any) => (v.productColorId === pc.id || v.ProductColorId === pc.id) && !v.isDeleted)
+      .map((v: any) => v.sizeId ?? v.SizeId);
+  }, [batchColorId, productColors, variants]);
+
+  const filteredSizes = useMemo(() => {
+    if (!batchSizeGroupId) return globalSizes;
+    return globalSizes.filter((s: any) => s.sizeGroupId === batchSizeGroupId);
+  }, [globalSizes, batchSizeGroupId]);
+
+  const handleToggleBatchSize = (size: any) => {
+    setBatchRows((prev) => {
+      const exists = prev.some((r) => r.sizeId === size.id);
+      if (exists) {
+        return prev.filter((r) => r.sizeId !== size.id);
+      } else {
+        return [
+          ...prev,
+          {
+            sizeId: size.id,
+            sizeName: size.name,
+            stockQuantity: "",
+            priceDifference: "",
+            sku: "",
+            barcode: "",
+          },
+        ];
+      }
+    });
+  };
+
+  const handleSelectAllGroupSizes = () => {
+    const availableToAdd = filteredSizes.filter((s: any) => !existingVariantSizeIds.includes(s.id));
+    setBatchRows((prev) => {
+      const currentIds = prev.map((r) => r.sizeId);
+      const newToAdd = availableToAdd
+        .filter((s: any) => !currentIds.includes(s.id))
+        .map((s: any) => ({
+          sizeId: s.id,
+          sizeName: s.name,
+          stockQuantity: "",
+          priceDifference: "",
+          sku: "",
+          barcode: "",
+        }));
+      return [...prev, ...newToAdd];
+    });
+  };
+
+  const updateBatchRow = (idx: number, field: string, val: any) => {
+    setBatchRows((prev) => {
+      const next = [...prev];
+      next[idx] = { ...next[idx], [field]: val };
+      return next;
+    });
+
+    if (field === "barcode" && batchBarcodeErrors[idx]) {
+      setBatchBarcodeErrors((prev) => {
+        const next = { ...prev };
+        delete next[idx];
+        return next;
+      });
+    }
+  };
+
+  const handleRemoveBatchRow = (sizeId: number) => {
+    setBatchRows((prev) => prev.filter((r) => r.sizeId !== sizeId));
+  };
+
+  const handleAddBatchVariants = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newVariant.globalColorId || !newVariant.sizeId) {
-      toast.error("Lütfen renk ve beden seçin");
+    if (!batchColorId) {
+      toast.error("Lütfen bir renk seçin");
       return;
     }
-    if (!newVariant.sku || !newVariant.sku.trim()) {
-      toast.error("Lütfen SKU kodunu girin");
-      return;
-    }
-    if (!newVariant.barcode || !newVariant.barcode.trim()) {
-      toast.error("Lütfen barkod numarasını girin");
+    if (batchRows.length === 0) {
+      toast.error("Lütfen en az bir beden seçin");
       return;
     }
 
-    const selectedGlobalColorId = Number(newVariant.globalColorId);
+    // 1. Boş Barkod Kontrolü
+    const errors: Record<number, string> = {};
+    const trimmedBarcodes: { index: number; barcode: string }[] = [];
+
+    batchRows.forEach((row, idx) => {
+      const b = typeof row.barcode === "string" ? row.barcode.trim() : "";
+      if (!b) {
+        errors[idx] = "Barkod girilmesi zorunludur";
+      } else {
+        trimmedBarcodes.push({ index: idx, barcode: b });
+      }
+    });
+
+    if (Object.keys(errors).length > 0) {
+      setBatchBarcodeErrors(errors);
+      toast.error("Lütfen tüm varyantlar için barkod giriniz.");
+      return;
+    }
+
+    // 2. Form İçi Duplicate Kontrolü
+    const counts: Record<string, number[]> = {};
+    trimmedBarcodes.forEach(({ index, barcode }) => {
+      if (!counts[barcode]) counts[barcode] = [];
+      counts[barcode].push(index);
+    });
+
+    let hasDuplicate = false;
+    Object.entries(counts).forEach(([barcode, indices]) => {
+      if (indices.length > 1) {
+        hasDuplicate = true;
+        indices.forEach((idx) => {
+          errors[idx] = "Aynı barkodu birden fazla varyantta kullanamazsınız";
+        });
+      }
+    });
+
+    if (hasDuplicate) {
+      setBatchBarcodeErrors(errors);
+      toast.error("Aynı barkod numarası birden fazla varyantta kullanılamaz.");
+      return;
+    }
+
+    // 3. Backend Veritabanı Kontrolü
+    try {
+      setIsSubmittingBatch(true);
+      const existingInDb = await checkBarcodes(trimmedBarcodes.map((t) => t.barcode));
+      if (existingInDb && existingInDb.length > 0) {
+        trimmedBarcodes.forEach(({ index, barcode }) => {
+          if (existingInDb.includes(barcode)) {
+            errors[index] = "Bu barkod sistemde zaten kayıtlı";
+          }
+        });
+        setBatchBarcodeErrors(errors);
+        toast.error("Girdiğiniz bazı barkodlar sistemde zaten kayıtlı. Lütfen değiştirin.");
+        setIsSubmittingBatch(false);
+        return;
+      }
+    } catch (err: any) {
+      toast.error("Barkod kontrolü yapılırken bir hata oluştu: " + (err.response?.data?.message || err.message));
+      setIsSubmittingBatch(false);
+      return;
+    }
+
+    const selectedGlobalColorId = Number(batchColorId);
     let targetProductColorId: number;
     const existingProductColor = productColors.find((pc: any) => pc.colorId === selectedGlobalColorId);
 
@@ -300,26 +456,36 @@ export default function ProductDetailPage() {
         targetProductColorId = pcResult.data?.id || pcResult.id;
       }
 
-      const promise = addProductVariantMutation.mutateAsync({
-        productColorId: targetProductColorId,
-        sizeId: Number(newVariant.sizeId),
-        stockQuantity: newVariant.stockQuantity,
-        priceDifference: newVariant.priceDifference,
-        sku: newVariant.sku,
-        barcode: newVariant.barcode
-      });
+      const promises = batchRows.map((row) =>
+        addProductVariantMutation.mutateAsync({
+          productColorId: targetProductColorId,
+          sizeId: row.sizeId,
+          stockQuantity: Number(row.stockQuantity) || 0,
+          priceDifference: Number(row.priceDifference) || 0,
+          sku: row.sku?.trim() || undefined,
+          barcode: row.barcode.trim(),
+        })
+      );
 
-      toast.promise(promise, {
-        loading: "Varyant ekleniyor...",
+      const count = batchRows.length;
+      toast.promise(Promise.all(promises), {
+        loading: `${count} varyant ekleniyor...`,
         success: () => {
           setIsVariantDialogOpen(false);
-          setNewVariant({ globalColorId: "", sizeId: "", stockQuantity: 0, priceDifference: 0, sku: "", barcode: "" });
-          return "Varyant başarıyla eklendi";
+          setBatchColorId("");
+          setBatchRows([]);
+          setBatchBarcodeErrors({});
+          setIsSubmittingBatch(false);
+          return `${count} varyant başarıyla eklendi`;
         },
-        error: (err: any) => `Varyant eklenemedi: ${err.response?.data || err.message}`
+        error: (err: any) => {
+          setIsSubmittingBatch(false);
+          return err.response?.data?.message || err.message || "Varyantlar eklenirken hata oluştu";
+        }
       });
     } catch (err: any) {
-      toast.error("Varyant kaydedilirken hata oluştu", { description: err.message });
+      setIsSubmittingBatch(false);
+      toast.error(err.response?.data?.message || err.message || "İşlem sırasında hata oluştu");
     }
   };
 
@@ -475,32 +641,25 @@ export default function ProductDetailPage() {
               </div>
               <div>
                 <h2 className="text-base font-bold text-slate-900">Temel Bilgiler</h2>
-                <p className="text-xs text-muted-foreground">Ürünün ana başlık, URL ve kategori tanımlamaları</p>
+                <p className="text-xs text-muted-foreground">Ürünün ana başlık ve kategori tanımlamaları</p>
               </div>
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-4">
               <div className="space-y-1.5">
-                <Label className="text-xs font-semibold text-slate-700">Ürün Adı</Label>
+                <Label className="text-xs font-semibold text-slate-700">Ürün Adı *</Label>
                 <Input 
                   value={formData.name} 
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })} 
                   disabled={isViewer} 
+                  placeholder="Örn: Yazlık Gömlek"
                   className="h-9 text-sm"
                 />
               </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs font-semibold text-slate-700">URL (Slug)</Label>
-                <Input 
-                  value={formData.slug} 
-                  onChange={(e) => setFormData({ ...formData, slug: e.target.value })} 
-                  disabled={isViewer} 
-                  className="h-9 text-sm"
-                />
-              </div>
-              
-              <div className="space-y-1.5">
-                <Label className="text-xs font-semibold text-slate-700">Kategori *</Label>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-semibold text-slate-700">Kategori *</Label>
                 <Select
                   disabled={isViewer}
                   value={formData.categoryId ? String(formData.categoryId) : ""}
@@ -608,7 +767,7 @@ export default function ProductDetailPage() {
                 </Select>
               </div>
 
-              <div className="md:col-span-2 space-y-1.5">
+              <div className="col-span-full space-y-1.5">
                 <Label className="text-xs font-semibold text-slate-700">Ürün Açıklaması</Label>
                 <Textarea 
                   value={formData.description} 
@@ -621,6 +780,7 @@ export default function ProductDetailPage() {
               </div>
             </div>
           </div>
+        </div>
 
 
 
@@ -903,130 +1063,328 @@ export default function ProductDetailPage() {
                     <DialogTrigger className="inline-flex h-9 items-center justify-center rounded-xl bg-slate-900 text-white px-3.5 text-xs font-semibold shadow-xs hover:bg-slate-800 transition-colors">
                       <Plus className="w-3.5 h-3.5 mr-1" /> Varyant Ekle
                     </DialogTrigger>
-                    <DialogContent className="sm:max-w-md p-6 rounded-2xl">
+                    <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto p-6 rounded-2xl">
                       <DialogHeader>
-                        <DialogTitle className="text-base font-bold">Yeni Varyant Ekle</DialogTitle>
+                        <DialogTitle className="text-base font-bold flex items-center gap-2">
+                          <Layers className="w-4 h-4 text-primary" />
+                          Toplu Varyant Ekle
+                        </DialogTitle>
                       </DialogHeader>
-                      <form onSubmit={handleAddVariant} className="space-y-4 pt-2">
-                        <div className="grid grid-cols-2 gap-3">
-                          <div className="space-y-1.5">
-                            <Label className="text-xs font-semibold flex items-center gap-0.5">
-                              Renk <span className="text-destructive">*</span>
-                            </Label>
-                            <Select
-                              value={String(newVariant.globalColorId || "")}
-                              onValueChange={(val) => setNewVariant({ ...newVariant, globalColorId: val })}
-                            >
-                              <SelectTrigger className="h-9 text-xs">
-                                <SelectValue placeholder="Renk Seçin">
-                                  {(() => {
-                                    const sc = globalColors?.find((c: any) => String(c.id) === String(newVariant.globalColorId));
-                                    return sc ? (
-                                      <div className="flex items-center gap-2 text-xs">
-                                        <div className="w-3 h-3 rounded-full border shadow-2xs" style={{ backgroundColor: sc.hexCode }} />
-                                        <span>{sc.name}</span>
-                                      </div>
-                                    ) : "Renk Seçin";
-                                  })()}
-                                </SelectValue>
-                              </SelectTrigger>
-                              <SelectContent>
-                                {globalColors?.map((c: any) => (
-                                  <SelectItem key={c.id} value={String(c.id)}>
+
+                      <form onSubmit={handleAddBatchVariants} className="space-y-4 pt-2">
+                        {/* 1. Renk Seçimi */}
+                        <div className="space-y-1.5">
+                          <Label className="text-xs font-semibold flex items-center gap-0.5">
+                            1. Renk Seçin <span className="text-destructive">*</span>
+                          </Label>
+                          <Select
+                            value={String(batchColorId || "")}
+                            onValueChange={(val) => {
+                              setBatchColorId(val);
+                              setBatchRows([]);
+                            }}
+                          >
+                            <SelectTrigger className="h-9 text-xs">
+                              <SelectValue placeholder="Renk Seçin">
+                                {(() => {
+                                  const sc = globalColors?.find((c: any) => String(c.id) === String(batchColorId));
+                                  return sc ? (
                                     <div className="flex items-center gap-2 text-xs">
-                                      <div className="w-3 h-3 rounded-full border shadow-2xs" style={{ backgroundColor: c.hexCode }} />
-                                      {c.name}
-                                    </div>
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                          <div className="space-y-1.5">
-                            <Label className="text-xs font-semibold flex items-center gap-0.5">
-                              Beden <span className="text-destructive">*</span>
-                            </Label>
-                            <Select
-                              value={String(newVariant.sizeId || "")}
-                              onValueChange={(val) => setNewVariant({ ...newVariant, sizeId: val })}
-                            >
-                              <SelectTrigger className="h-9 text-xs">
-                                <SelectValue placeholder="Beden Seçin">
-                                  {(() => {
-                                    const s = globalSizes?.find((x: any) => String(x.id) === String(newVariant.sizeId));
-                                    if (!s) return "Beden Seçin";
-                                    return s.sizeGroupName ? `${s.name} (${s.sizeGroupName})` : s.name;
-                                  })()}
-                                </SelectValue>
-                              </SelectTrigger>
-                              <SelectContent>
-                                {globalSizes?.map((s: any) => (
-                                  <SelectItem key={s.id} value={String(s.id)}>
-                                    <div className="flex items-center justify-between w-full gap-2">
-                                      <span className="text-xs font-semibold">{s.name}</span>
-                                      {s.sizeGroupName && (
-                                        <span className="text-[10px] text-muted-foreground bg-slate-100 px-1.5 py-0.5 rounded">
-                                          {s.sizeGroupName}
-                                        </span>
+                                      <div className="w-3.5 h-3.5 rounded-full border shadow-2xs" style={{ backgroundColor: sc.hexCode }} />
+                                      <span className="font-semibold">{sc.name}</span>
+                                      {productColors.some((pc: any) => pc.colorId === sc.id) && (
+                                        <Badge variant="secondary" className="text-[10px] py-0 px-1.5">Mevcut Renk</Badge>
                                       )}
                                     </div>
-                                  </SelectItem>
+                                  ) : "Renk Seçin";
+                                })()}
+                              </SelectValue>
+                            </SelectTrigger>
+                            <SelectContent>
+                              {globalColors?.map((c: any) => (
+                                <SelectItem key={c.id} value={String(c.id)}>
+                                  <div className="flex items-center gap-2 text-xs">
+                                    <div className="w-3.5 h-3.5 rounded-full border shadow-2xs" style={{ backgroundColor: c.hexCode }} />
+                                    <span>{c.name}</span>
+                                    {productColors.some((pc: any) => pc.colorId === c.id) && (
+                                      <Badge variant="outline" className="text-[10px] py-0 px-1 text-emerald-700 bg-emerald-50 border-emerald-200">Mevcut</Badge>
+                                    )}
+                                  </div>
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        {/* 2. Beden Grubu & Beden Seçimi */}
+                        <div className="border rounded-xl bg-slate-50/50 divide-y divide-slate-200/80 overflow-hidden">
+                          {/* 1. Beden Grubu Filtresi */}
+                          {sizeGroups.length > 0 && (
+                            <div className="p-3 bg-white/70 space-y-1.5">
+                              <Label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+                                Beden Grubu Filtresi
+                              </Label>
+                              <div className="flex flex-wrap gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => setBatchSizeGroupId(null)}
+                                  className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all ${
+                                    batchSizeGroupId === null
+                                      ? "bg-slate-900 text-white shadow-2xs"
+                                      : "bg-white border border-slate-200 text-slate-700 hover:bg-slate-100"
+                                  }`}
+                                >
+                                  Tüm Gruplar
+                                </button>
+                                {sizeGroups.map((sg: any) => (
+                                  <button
+                                    key={sg.id}
+                                    type="button"
+                                    onClick={() => setBatchSizeGroupId(sg.id)}
+                                    className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all ${
+                                      batchSizeGroupId === sg.id
+                                        ? "bg-slate-900 text-white shadow-2xs"
+                                        : "bg-white border border-slate-200 text-slate-700 hover:bg-slate-100"
+                                    }`}
+                                  >
+                                    {sg.name}
+                                  </button>
                                 ))}
-                              </SelectContent>
-                            </Select>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* 2. Beden Butonları & Beden Seçim Kontrolleri */}
+                          <div className="p-3.5 space-y-2.5 bg-slate-50/40">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-1.5">
+                                <Label className="text-xs font-semibold text-slate-800">
+                                  {batchSizeGroupId
+                                    ? `${sizeGroups.find((g: any) => g.id === batchSizeGroupId)?.name || ""} Bedenleri`
+                                    : "Eklenecek Bedenler"}
+                                </Label>
+                                <span className="text-[10px] text-muted-foreground bg-slate-200/70 px-1.5 py-0.5 rounded-full font-medium">
+                                  {filteredSizes.length} Beden
+                                </span>
+                              </div>
+
+                              <div className="flex items-center gap-1.5">
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-6 text-[11px] font-medium text-slate-700 hover:text-primary hover:bg-primary/5 border-slate-300 bg-white px-2 shadow-2xs"
+                                  onClick={handleSelectAllGroupSizes}
+                                >
+                                  <CheckCheck className="w-3 h-3 mr-1 text-primary" />
+                                  {batchSizeGroupId ? "Bu Grubun Bedenlerini Seç" : "Tüm Bedenleri Seç"}
+                                </Button>
+                                {batchRows.length > 0 && (
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-6 text-[11px] font-medium text-rose-600 hover:text-rose-700 hover:bg-rose-50 px-2"
+                                    onClick={() => setBatchRows([])}
+                                  >
+                                    Temizle
+                                  </Button>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Beden Butonları */}
+                            <div className="flex flex-wrap gap-1.5 pt-0.5">
+                              {filteredSizes.map((size: any) => {
+                                const isSelected = batchRows.some((r) => r.sizeId === size.id);
+                                const alreadyExists = existingVariantSizeIds.includes(size.id);
+
+                                return (
+                                  <button
+                                    key={size.id}
+                                    type="button"
+                                    disabled={alreadyExists}
+                                    onClick={() => handleToggleBatchSize(size)}
+                                    className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-all flex items-center gap-1.5 ${
+                                      alreadyExists
+                                        ? "bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed line-through"
+                                        : isSelected
+                                        ? "border-primary bg-primary text-primary-foreground shadow-2xs font-semibold"
+                                        : "bg-white border-slate-200 text-slate-700 hover:border-primary/50"
+                                    }`}
+                                    title={alreadyExists ? "Bu renk ve beden kombinasyonu zaten ekli" : undefined}
+                                  >
+                                    {isSelected && <Check className="w-3 h-3" />}
+                                    <span>{size.name}</span>
+                                  </button>
+                                );
+                              })}
+                            </div>
                           </div>
                         </div>
-                        <div className="grid grid-cols-2 gap-3">
-                          <div className="space-y-1.5">
-                            <Label className="text-xs font-semibold">Stok Miktarı</Label>
-                            <Input 
-                              type="number" 
-                              min="0"
-                              value={newVariant.stockQuantity}
-                              onChange={(e) => setNewVariant({ ...newVariant, stockQuantity: Number(e.target.value) })}
-                              className="h-9 text-xs"
-                            />
+
+                        {/* 3. Seçilen Bedenler Tablosu (Stok, Fiyat Farkı, SKU, Barkod) */}
+                        {batchRows.length > 0 && (
+                          <div className="space-y-2.5">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                              <Label className="text-xs font-semibold text-slate-800">
+                                3. Varyant Bilgileri ({batchRows.length} Beden Seçildi)
+                              </Label>
+                            </div>
+
+                            {/* Hızlı Toplu Değer Doldurma Çubuğu */}
+                            <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 bg-slate-100/70 border border-slate-200 rounded-xl shadow-2xs">
+                              <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-700">
+                                <Zap className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
+                                <span>Hızlı Toplu Doldur:</span>
+                              </div>
+
+                              <div className="flex flex-wrap items-center gap-2">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-[11px] text-muted-foreground font-medium">Stok:</span>
+                                  <Input
+                                    type="number"
+                                    min="0"
+                                    placeholder="Tümü..."
+                                    value={batchBulkStock}
+                                    onChange={(e) => setBatchBulkStock(e.target.value)}
+                                    className="h-7.5 w-24 text-center text-xs font-mono font-bold bg-white"
+                                  />
+                                </div>
+
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-[11px] text-muted-foreground font-medium">Fiyat Farkı:</span>
+                                  <Input
+                                    type="number"
+                                    step="0.01"
+                                    placeholder="0.00"
+                                    value={batchBulkPriceDiff}
+                                    onChange={(e) => setBatchBulkPriceDiff(e.target.value)}
+                                    className="h-7.5 w-24 text-center text-xs font-mono font-bold bg-white"
+                                  />
+                                </div>
+
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={handleApplyBatchBulkStock}
+                                  className="h-7.5 text-xs font-medium bg-white hover:bg-slate-50 text-slate-800 border-slate-300"
+                                >
+                                  <CheckCheck className="w-3.5 h-3.5 mr-1 text-emerald-600" /> Tümüne Uygula
+                                </Button>
+                              </div>
+                            </div>
+
+                            <div className="border border-slate-200 rounded-xl overflow-hidden shadow-2xs max-h-60 overflow-y-auto">
+                              <table className="w-full text-xs">
+                                <thead className="bg-slate-50 sticky top-0 z-10 border-b border-slate-200">
+                                  <tr>
+                                    <th className="text-left px-3 py-2 font-semibold text-slate-700">Beden</th>
+                                    <th className="text-center px-3 py-2 font-semibold text-slate-700">Stok Miktarı</th>
+                                    <th className="text-center px-3 py-2 font-semibold text-slate-700">Fiyat Farkı (₺)</th>
+                                    <th className="text-left px-3 py-2 font-semibold text-slate-700">SKU (Opsiyonel)</th>
+                                    <th className="text-left px-3 py-2 font-semibold text-slate-700">Barkod <span className="text-destructive">*</span></th>
+                                    <th className="px-2 py-2"></th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100 bg-white">
+                                  {batchRows.map((row, idx) => (
+                                    <tr key={row.sizeId} className="hover:bg-slate-50/50">
+                                      <td className="px-3 py-2 font-bold text-slate-900">{row.sizeName}</td>
+                                      <td className="px-3 py-2 text-center">
+                                        <Input
+                                          type="number"
+                                          min="0"
+                                          placeholder="0"
+                                          value={row.stockQuantity}
+                                          onChange={(e) => updateBatchRow(idx, "stockQuantity", e.target.value)}
+                                          className="h-8 w-20 text-center text-xs font-mono font-bold mx-auto"
+                                        />
+                                      </td>
+                                      <td className="px-3 py-2 text-center">
+                                        <Input
+                                          type="number"
+                                          step="0.01"
+                                          placeholder="0"
+                                          value={row.priceDifference}
+                                          onChange={(e) => updateBatchRow(idx, "priceDifference", e.target.value)}
+                                          className="h-8 w-24 text-center text-xs font-mono font-bold mx-auto"
+                                        />
+                                      </td>
+                                      <td className="px-3 py-2">
+                                        <Input
+                                          placeholder="Otomatik"
+                                          value={row.sku}
+                                          onChange={(e) => updateBatchRow(idx, "sku", e.target.value)}
+                                          className="h-8 w-28 text-xs font-mono"
+                                        />
+                                      </td>
+                                      <td className="px-3 py-2">
+                                        <div className="space-y-0.5">
+                                          <Input
+                                            placeholder="Barkod No *"
+                                            value={row.barcode}
+                                            onChange={(e) => updateBatchRow(idx, "barcode", e.target.value)}
+                                            className={`h-8 w-32 text-xs font-mono transition-colors ${
+                                              batchBarcodeErrors[idx] ? "border-destructive focus-visible:ring-destructive bg-rose-50/40 text-destructive" : ""
+                                            }`}
+                                            required
+                                          />
+                                          {batchBarcodeErrors[idx] && (
+                                            <p className="text-[10px] text-destructive font-medium leading-none mt-0.5">{batchBarcodeErrors[idx]}</p>
+                                          )}
+                                        </div>
+                                      </td>
+                                      <td className="px-2 py-2 text-right">
+                                        <Button
+                                          type="button"
+                                          variant="ghost"
+                                          size="icon"
+                                          className="h-7 w-7 text-slate-400 hover:text-rose-600"
+                                          onClick={() => handleRemoveBatchRow(row.sizeId)}
+                                        >
+                                          <Trash2 className="w-3.5 h-3.5" />
+                                        </Button>
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
                           </div>
-                          <div className="space-y-1.5">
-                            <Label className="text-xs font-semibold">Fiyat Farkı (TL)</Label>
-                            <Input 
-                              type="number" 
-                              step="0.01"
-                              value={newVariant.priceDifference}
-                              onChange={(e) => setNewVariant({ ...newVariant, priceDifference: Number(e.target.value) })}
-                              className="h-9 text-xs"
-                            />
-                          </div>
-                        </div>
-                        <div className="grid grid-cols-2 gap-3">
-                          <div className="space-y-1.5">
-                            <Label className="text-xs font-semibold flex items-center gap-0.5">
-                              SKU <span className="text-destructive">*</span>
-                            </Label>
-                            <Input 
-                              value={newVariant.sku}
-                              onChange={(e) => setNewVariant({ ...newVariant, sku: e.target.value })}
-                              className="h-9 text-xs"
-                              placeholder="Örn: HKN-TSH-01"
-                              required
-                            />
-                          </div>
-                          <div className="space-y-1.5">
-                            <Label className="text-xs font-semibold flex items-center gap-0.5">
-                              Barkod <span className="text-destructive">*</span>
-                            </Label>
-                            <Input 
-                              value={newVariant.barcode}
-                              onChange={(e) => setNewVariant({ ...newVariant, barcode: e.target.value })}
-                              className="h-9 text-xs"
-                              placeholder="Örn: 869000123"
-                              required
-                            />
-                          </div>
-                        </div>
-                        <DialogFooter className="pt-2">
-                          <Button type="button" variant="outline" size="sm" onClick={() => setIsVariantDialogOpen(false)}>İptal</Button>
-                          <Button type="submit" size="sm" className="font-semibold">Kaydet</Button>
+                        )}
+
+                        <DialogFooter className="pt-3 border-t flex items-center justify-between sm:justify-between">
+                          <Button type="button" variant="outline" size="sm" onClick={() => setIsVariantDialogOpen(false)} disabled={isSubmittingBatch}>
+                            Vazgeç
+                          </Button>
+                          <Button
+                            type="submit"
+                            size="sm"
+                            disabled={!batchColorId || batchRows.length === 0 || isSubmittingBatch}
+                            className={`font-semibold transition-all ${
+                              Object.keys(batchBarcodeErrors).length > 0
+                                ? "bg-rose-600 hover:bg-rose-700 text-white shadow-xs"
+                                : "bg-slate-900 hover:bg-slate-800 text-white"
+                            }`}
+                          >
+                            {isSubmittingBatch ? (
+                              <>
+                                <Spinner className="mr-1.5" size="sm" /> Barkodlar Kontrol Ediliyor...
+                              </>
+                            ) : Object.keys(batchBarcodeErrors).length > 0 ? (
+                              <>
+                                <AlertCircle className="w-4 h-4 mr-1.5" /> Barkodları Düzeltin & Tekrar Dene
+                              </>
+                            ) : batchRows.length > 0 ? (
+                              <>
+                                <ShieldCheck className="w-4 h-4 mr-1.5" /> {batchRows.length} Varyantı Doğrula & Ekle
+                              </>
+                            ) : (
+                              "Varyant Ekle"
+                            )}
+                          </Button>
                         </DialogFooter>
                       </form>
                     </DialogContent>
@@ -1120,11 +1478,13 @@ export default function ProductDetailPage() {
                                         {isEditing ? (
                                           <Input 
                                             type="number" 
-                                            className="h-7 w-20 text-xs" 
-                                            value={variantUpdates[variant.id]?.stockQuantity ?? variant.stockQuantity}
+                                            min="0"
+                                            placeholder="0"
+                                            className="h-8 w-20 text-center text-xs font-mono font-bold" 
+                                            value={variantUpdates[variant.id]?.stockQuantity !== undefined ? variantUpdates[variant.id]?.stockQuantity : (variant.stockQuantity === 0 ? "" : variant.stockQuantity)}
                                             onChange={(e) => setVariantUpdates(prev => ({ 
                                               ...prev, 
-                                              [variant.id]: { ...prev[variant.id], stockQuantity: Number(e.target.value) } 
+                                              [variant.id]: { ...prev[variant.id], stockQuantity: e.target.value } 
                                             }))}
                                           />
                                         ) : (
@@ -1146,11 +1506,13 @@ export default function ProductDetailPage() {
                                         {isEditing ? (
                                           <Input 
                                             type="number" 
-                                            className="h-7 w-20 text-xs" 
-                                            value={variantUpdates[variant.id]?.priceDifference ?? variant.priceDifference}
+                                            step="0.01"
+                                            placeholder="0"
+                                            className="h-8 w-20 text-center text-xs font-mono font-bold" 
+                                            value={variantUpdates[variant.id]?.priceDifference !== undefined ? variantUpdates[variant.id]?.priceDifference : (variant.priceDifference === 0 ? "" : variant.priceDifference)}
                                             onChange={(e) => setVariantUpdates(prev => ({ 
                                               ...prev, 
-                                              [variant.id]: { ...prev[variant.id], priceDifference: Number(e.target.value) } 
+                                              [variant.id]: { ...prev[variant.id], priceDifference: e.target.value } 
                                             }))}
                                           />
                                         ) : (
@@ -1360,10 +1722,12 @@ export default function ProductDetailPage() {
                 <Label className="text-xs font-semibold text-slate-700">Sıralama Önceliği (Display Order)</Label>
                 <Input 
                   type="number"
-                  value={formData.displayOrder} 
-                  onChange={(e) => setFormData({ ...formData, displayOrder: Number(e.target.value) })} 
+                  min="0"
+                  placeholder="0"
+                  value={formData.displayOrder === 0 ? "" : (formData.displayOrder ?? "")} 
+                  onChange={(e) => setFormData({ ...formData, displayOrder: e.target.value === "" ? 0 : Number(e.target.value) })} 
                   disabled={isViewer} 
-                  className="h-9 text-xs mt-1"
+                  className="h-9 w-28 text-center text-xs font-mono font-bold mt-1"
                 />
                 <p className="text-[10px] text-muted-foreground mt-1">Düşük sayılar listelerde daha önce görünür.</p>
               </div>
