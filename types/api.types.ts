@@ -101,16 +101,29 @@ export interface Category extends BaseEntity {
   imageUrl1?: string;
   imageUrl2?: string;
   slug: string;
+  sizeGroupId?: number | null;
+  sizeGroupName?: string;
 }
 
-export interface CreateCategoryDto extends Pick<Category, "name" | "parentCategoryId" | "description" | "slug"> {
+export interface CreateCategoryDto extends Pick<Category, "name" | "parentCategoryId" | "description" | "slug" | "sizeGroupId"> {
   image1?: File;
   image2?: File;
 }
 
-export interface UpdateCategoryDto extends Pick<Category, "id" | "name" | "parentCategoryId" | "description" | "slug"> {
+export interface UpdateCategoryDto extends Pick<Category, "id" | "name" | "parentCategoryId" | "description" | "slug" | "sizeGroupId"> {
   image1?: File;
   image2?: File;
+}
+
+export interface SizeLookupDto {
+  id: number;
+  name: string;
+}
+
+export interface SizeGroupWithSizesLookupDto {
+  id: number;
+  name: string;
+  sizes: SizeLookupDto[];
 }
 
 // ─── Users ───────────────────────────────────────────────────────────────────

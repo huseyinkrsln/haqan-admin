@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import { useSession } from "next-auth/react";
 
 import { useCategories, useCreateCategory, useUpdateCategory, useDeleteCategory } from "@/hooks/useCategories";
+import { useSizeGroups } from "@/hooks/useSizeGroups";
 import { Category, CreateCategoryDto, UpdateCategoryDto } from "@/types/api.types";
 import { DataTable } from "@/components/ui/data-table";
 import { Button } from "@/components/ui/button";
@@ -46,6 +47,7 @@ export default function CategoriesPage() {
   }, [searchParams]);
 
   const { data, isLoading, isFetching, refetch } = useCategories();
+  const { data: sizeGroups = [] } = useSizeGroups();
   
   // Backend'den PaginatedResult veya IDataResult dönebilir, güvenli şekilde array'i alalım
   const categories: Category[] = Array.isArray(data) ? data : (data as any)?.data || [];
@@ -92,6 +94,7 @@ export default function CategoriesPage() {
 
   // parentCategoryId eşleştirme: liste içinde ana kategori adını bul
   const categoryMap = Object.fromEntries(categories.map((c) => [c.id, c.name]));
+  const sizeGroupMap = Object.fromEntries(sizeGroups.map((g) => [g.id, g.name]));
 
   // Silinmek istenen kategorinin alt kategorilerini tespit et
   const subCategoriesOfToDelete = toDelete
@@ -119,6 +122,21 @@ export default function CategoriesPage() {
           <Badge variant="outline">{categoryMap[pid] ?? `#${pid}`}</Badge>
         ) : (
           <span className="text-xs text-muted-foreground">Ana kategori</span>
+        );
+      },
+    },
+    {
+      accessorKey: "sizeGroupId",
+      header: "Beden Grubu",
+      cell: ({ row }) => {
+        const sgId = row.original.sizeGroupId;
+        const sgName = sgId ? (sizeGroupMap[sgId] || (row.original as any).sizeGroupName || `#${sgId}`) : null;
+        return sgName ? (
+          <Badge variant="secondary" className="font-normal text-xs bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+            {sgName}
+          </Badge>
+        ) : (
+          <span className="text-xs text-muted-foreground">-</span>
         );
       },
     },

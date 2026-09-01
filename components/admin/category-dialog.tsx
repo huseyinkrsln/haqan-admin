@@ -15,6 +15,7 @@ import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/ui/spinner";
 import { Category, CreateCategoryDto, UpdateCategoryDto } from "@/types/api.types";
 import { useRootCategoryLookup } from "@/hooks/useCategories";
+import { useSizeGroups } from "@/hooks/useSizeGroups";
 
 interface CategoryDialogProps {
   open: boolean;
@@ -38,27 +39,31 @@ export function CategoryDialog({
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
   const [parentCategoryId, setParentCategoryId] = useState<string>("");
+  const [sizeGroupId, setSizeGroupId] = useState<string>("");
   const [description, setDescription] = useState("");
   const [image1, setImage1] = useState<File | null>(null);
   const [image2, setImage2] = useState<File | null>(null);
 
   // Backend'den doğrudan "ParentCategoryId IS NULL" filtrelenmiş kök kategorileri çekiyoruz
   const { data: rootCategories, refetch: refetchRootCategories } = useRootCategoryLookup();
+  const { data: sizeGroups = [], refetch: refetchSizeGroups } = useSizeGroups();
 
   const firstInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (open) {
       refetchRootCategories();
+      refetchSizeGroups();
       setName(initialData?.name || "");
       setSlug(initialData?.slug || "");
       setParentCategoryId(initialData?.parentCategoryId ? String(initialData.parentCategoryId) : "");
+      setSizeGroupId(initialData?.sizeGroupId ? String(initialData.sizeGroupId) : "");
       setDescription(initialData?.description || "");
       setImage1(null);
       setImage2(null);
       setTimeout(() => firstInputRef.current?.focus(), 50);
     }
-  }, [open, initialData, refetchRootCategories]);
+  }, [open, initialData, refetchRootCategories, refetchSizeGroups]);
 
   // Eğer lookup verisi henüz gelmediyse veya önbellekteyse categories prop'undan ana kategorileri al
   const fallbackRoots = (categories || [])
@@ -76,6 +81,8 @@ export function CategoryDialog({
     };
 
     if (parentCategoryId) payload.parentCategoryId = Number(parentCategoryId);
+    if (sizeGroupId) payload.sizeGroupId = Number(sizeGroupId);
+    else payload.sizeGroupId = null;
     if (description.trim()) payload.description = description.trim();
     if (image1) payload.Image1 = image1;
     if (image2) payload.Image2 = image2;
@@ -126,6 +133,27 @@ export function CategoryDialog({
                   </option>
                 ))}
             </select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="c-size-group">Beden Grubu (Size Group)</Label>
+            <select
+              id="c-size-group"
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+              value={sizeGroupId}
+              onChange={(e) => setSizeGroupId(e.target.value)}
+              disabled={isPending}
+            >
+              <option value="">Beden Grubu Yok / İsteğe Bağlı</option>
+              {sizeGroups.map((g) => (
+                <option key={g.id} value={g.id}>
+                  {g.name}
+                </option>
+              ))}
+            </select>
+            <p className="text-[10px] text-muted-foreground">
+              Bu kategoriye ait ürünlerin ve web filtrelerinin kullanacağı beden grubunu seçin (Örn: Giyim, Ayakkabı, Aksesuar).
+            </p>
           </div>
 
           <div className="space-y-1.5">
