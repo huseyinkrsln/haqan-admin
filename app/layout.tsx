@@ -15,8 +15,13 @@ const playfair = Playfair_Display({
 });
 
 export const metadata: Metadata = {
-  title: "Haqan Admin Dashboard",
-  description: "Light-themed standalone admin dashboard",
+  title: "HAQAN Wear — Yönetim Paneli",
+  description: "HAQAN Wear E-Ticaret Yönetim ve Operasyon Paneli",
+  icons: {
+    icon: "/icons/favicon-32x32.png",
+    shortcut: "/icons/favicon-16x16.png",
+    apple: "/icons/apple-touch-icon.png",
+  },
 };
 
 export default function RootLayout({

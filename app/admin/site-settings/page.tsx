@@ -125,12 +125,13 @@ const SETTING_GROUPS: SettingGroupMeta[] = [
 // Varsayılan / Başlangıç Ayar Şablonları (Preset)
 const DEFAULT_PRESETS: SiteSettingBulkItemDto[] = [
   // Genel
-  { settingKey: "SiteTitle", settingValue: "Hakan Wear", groupKey: "General", description: "Web sitesinin ana başlığı (Title)" },
-  { settingKey: "SiteSlogan", settingValue: "Premium Erkek & Kadın Giyim", groupKey: "General", description: "Site sloganı veya alt başlığı" },
-  { settingKey: "LogoUrl", settingValue: "", groupKey: "General", description: "Site ana logosunun URL bağlantısı" },
-  { settingKey: "FaviconUrl", settingValue: "", groupKey: "General", description: "Tarayıcı sekme ikonu (Favicon)" },
-  { settingKey: "MetaDescription", settingValue: "En trend erkek ve kadın giyim ürünleri, kaliteli kumaş ve hızlı kargo avantajıyla Hakan Wear'da.", groupKey: "General", description: "Google arama motoru açıklaması" },
-  { settingKey: "MetaKeywords", settingValue: "giyim, moda, takım elbise, sweatshirt, pantolon, hakan wear", groupKey: "General", description: "SEO anahtar kelimeleri (virgülle ayrılmış)" },
+  { settingKey: "SiteTitle", settingValue: "HAQAN Wear", groupKey: "General", description: "Web sitesinin ana başlığı (Title)" },
+  { settingKey: "SiteSlogan", settingValue: "Sessiz Özgüven", groupKey: "General", description: "Site sloganı veya alt başlığı" },
+  // Logo ve Favicon alanları geçici olarak devre dışı bırakıldı (sistem sabit marka varlıklarını kullanmaktadır)
+  // { settingKey: "LogoUrl", settingValue: "", groupKey: "General", description: "Site ana logosunun URL bağlantısı" },
+  // { settingKey: "FaviconUrl", settingValue: "", groupKey: "General", description: "Tarayıcı sekme ikonu (Favicon)" },
+  { settingKey: "MetaDescription", settingValue: "Zamansız tasarımlar ve premium kumaşlarla giyimde yeni standartlar. Takım elbise, gömlek, pantolon ve aksesuar koleksiyonları.", groupKey: "General", description: "Google arama motoru açıklaması" },
+  { settingKey: "MetaKeywords", settingValue: "erkek giyim, moda, takım elbise, gömlek, pantolon, haqan wear", groupKey: "General", description: "SEO anahtar kelimeleri (virgülle ayrılmış)" },
 
   // İletişim
   { settingKey: "PhoneNumber", settingValue: "+90 555 111 22 33", groupKey: "Contact", description: "Müşteri hizmetleri telefon numarası" },
@@ -222,9 +223,12 @@ export default function SiteSettingsPage() {
   // Delete State
   const [settingToDelete, setSettingToDelete] = useState<SiteSetting | null>(null);
 
-  // Filtered Settings
+  // Filtered Settings (Logo ve Favicon alanları geçici olarak gizlendi)
   const filteredSettings = useMemo(() => {
     return settings.filter((item) => {
+      const isHiddenKey = ["logourl", "faviconurl"].includes((item.settingKey || "").toLowerCase());
+      if (isHiddenKey) return false;
+
       const matchesGroup =
         selectedGroup === "ALL" || (item.groupKey || "General").toLowerCase() === selectedGroup.toLowerCase();
 

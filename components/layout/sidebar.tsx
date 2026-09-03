@@ -31,6 +31,7 @@ import {
 import { useSession } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/ui/logo";
+import Image from "next/image";
 
 interface NavItem {
   title: string;
@@ -203,20 +204,42 @@ export function Sidebar() {
         isCollapsed ? "w-20" : "w-64"
       )}
     >
-      <div className={cn("flex h-16 items-center border-b border-border", isCollapsed ? "justify-center px-0" : "justify-between px-6")}>
-        {!isCollapsed && (
-          <Link href="/admin" className="shrink-0 cursor-pointer transition-transform hover:scale-105 active:scale-95">
-            <Logo className="w-32 text-primary" />
-          </Link>
+      <div className={cn("flex h-16 items-center border-b border-border transition-all", isCollapsed ? "justify-center px-0" : "justify-between px-5")}>
+        {!isCollapsed ? (
+          <>
+            <Link href="/admin" className="flex items-center gap-2.5 shrink-0 cursor-pointer group">
+              <div className="w-9 h-9 rounded-xl bg-primary text-primary-foreground flex items-center justify-center font-serif font-bold text-sm tracking-wider shadow-sm group-hover:scale-105 transition-transform">
+                HQ
+              </div>
+              <div className="flex flex-col text-left">
+                <span className="font-serif text-lg font-bold tracking-[0.14em] text-foreground leading-none">
+                  HAQAN
+                </span>
+                <span className="text-[9px] tracking-[0.3em] text-primary font-bold uppercase mt-1">
+                  WEAR
+                </span>
+              </div>
+            </Link>
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              onClick={() => setIsCollapsed(true)}
+              className="ml-auto h-8 w-8 text-muted-foreground hover:text-foreground cursor-pointer"
+              title="Menüyü Daralt"
+            >
+              <ChevronLeft className="h-5 w-5" />
+            </Button>
+          </>
+        ) : (
+          <button
+            onClick={() => setIsCollapsed(false)}
+            title="Menüyü Genişlet"
+            className="w-10 h-10 rounded-xl bg-primary text-primary-foreground flex items-center justify-center font-serif font-bold text-sm tracking-wider shadow-sm hover:scale-105 active:scale-95 transition-all cursor-pointer group relative"
+          >
+            <span className="group-hover:opacity-0 transition-opacity">HQ</span>
+            <Menu className="h-4 w-4 absolute opacity-0 group-hover:opacity-100 transition-opacity" />
+          </button>
         )}
-        <Button 
-          variant="ghost" 
-          size="icon" 
-          onClick={() => setIsCollapsed(!isCollapsed)}
-          className={cn(isCollapsed ? "mx-auto" : "ml-auto")}
-        >
-          {isCollapsed ? <Menu className="h-5 w-5" /> : <ChevronLeft className="h-5 w-5" />}
-        </Button>
       </div>
       <nav className="flex-1 space-y-1.5 p-3 overflow-y-auto overflow-x-hidden">
         {visibleItems.map((item) => {
