@@ -60,8 +60,25 @@ export function useBulkUpdateOutfitPrices() {
       return res.data;
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-outfits"] });
       queryClient.invalidateQueries({ queryKey: ["outfits"] });
       queryClient.invalidateQueries({ queryKey: ["outfitsByProduct"] });
     },
   });
 }
+
+export function useUpdateOutfitPrice() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, price }: { id: number; price: number }) => {
+      const res = await axiosInstance.put("/api/Outfits/update-price", { id, price });
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-outfits"] });
+      queryClient.invalidateQueries({ queryKey: ["outfits"] });
+      queryClient.invalidateQueries({ queryKey: ["outfitsByProduct"] });
+    },
+  });
+}
+

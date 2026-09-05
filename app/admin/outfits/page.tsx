@@ -5,6 +5,7 @@ import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { axiosInstance } from "@/lib/axios";
 import { useInfiniteProductsPicker } from "@/hooks/useProducts";
+import { useUpdateOutfitPrice } from "@/hooks/useOutfits";
 import { ProductPickerDto, ProductPickerColorDto } from "@/types/api.types";
 import { ColumnDef } from "@tanstack/react-table";
 import { DataTable } from "@/components/ui/data-table";
@@ -88,6 +89,185 @@ interface Outfit {
   items: OutfitItem[];
 }
 
+// ─── Satır İçi Fiyat Düzenleme Hücre Bileşeni ─────────────────────────────────
+function InlineOutfitPriceCell({
+  outfit,
+  isEditing,
+  onStartEdit,
+  onCancel,
+  onSave,
+  isPending,
+}: {
+  outfit: Outfit;
+  isEditing: boolean;
+  onStartEdit: () => void;
+  onCancel: () => void;
+  onSave: (val: number) => Promise<void>;
+  isPending: boolean;
+}) {
+  const [val, setVal] = useState<string>(String(outfit.price));
+  const cellRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (isEditing) {
+      setVal(String(outfit.price));
+    }
+  }, [isEditing, outfit.price]);
+
+  // Hücre dışına tıklandığında/dokunulduğunda düzenleme modunu kapat
+  useEffect(() => {
+    if (!isEditing) return;
+
+    const handleClickOutside = (event: MouseEvent | TouchEvent) => {
+      if (cellRef.current && !cellRef.current.contains(event.target as Node) && !isPending) {
+        onCancel();
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("touchstart", handleClickOutside);
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("touchstart", handleClickOutside);
+    };
+  }, [isEditing, isPending, onCancel]);
+
+  const sumOriginal =
+    outfit.totalOriginalPrice ||
+    outfit.items?.reduce((s, i) => s + (i.productDiscountPrice ?? i.productBasePrice), 0) ||
+    0;
+  const savings = Math.max(0, sumOriginal - outfit.price);
+
+  if (isEditing) {
+    const origPrice = Number(outfit.price || 0);
+    const currentNum = val !== "" && !isNaN(Number(val)) ? Number(val) : origPrice;
+    const diff = currentNum - origPrice;
+
+    return (
+      <div ref={cellRef} className="space-y-1.5 py-1 min-w-[240px]" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-2">
+          <div className="relative w-36 sm:w-40">
+            <Input
+              type="number"
+              min="0"
+              step="0.01"
+              autoFocus
+              value={val}
+              onFocus={(e) => e.target.select()}
+              onChange={(e) => setVal(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  if (val === "" || isNaN(Number(val)) || Number(val) < 0) {
+                    toast.error("Geçerli bir fiyat giriniz.");
+                    return;
+                  }
+                  onSave(Number(val));
+                } else if (e.key === "Escape") {
+                  e.preventDefault();
+                  onCancel();
+                }
+              }}
+              placeholder="0.00"
+              className="h-9 font-bold text-sm text-right pr-7 bg-white border-2 border-emerald-600 focus-visible:ring-emerald-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none shadow-2xs"
+            />
+            <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 pointer-events-none">
+              ₺
+            </span>
+          </div>
+
+          <Button
+            type="button"
+            size="icon"
+            disabled={isPending}
+            onClick={() => {
+              if (val === "" || isNaN(Number(val)) || Number(val) < 0) {
+                toast.error("Geçerli bir fiyat giriniz.");
+                return;
+              }
+              onSave(Number(val));
+            }}
+            className="h-9 w-9 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg shrink-0 shadow-2xs"
+            title="Kaydet (Enter)"
+          >
+            {isPending ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <Check className="w-4 h-4 stroke-[3]" />
+            )}
+          </Button>
+
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            disabled={isPending}
+            onClick={onCancel}
+            className="h-9 w-9 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg shrink-0"
+            title="İptal (Esc)"
+          >
+            <X className="w-4 h-4" />
+          </Button>
+        </div>
+
+        <div className="space-y-1 text-[11px] pt-0.5">
+          <div className="text-slate-500 font-medium">
+            Eski: <span className="line-through">{new Intl.NumberFormat("tr-TR", { style: "currency", currency: "TRY" }).format(origPrice)}</span>{" "}
+            <span
+              className={
+                diff >= 0
+                  ? "text-emerald-600 font-semibold"
+                  : "text-rose-600 font-semibold"
+              }
+            >
+              ({diff >= 0 ? `+₺${diff.toLocaleString("tr-TR")}` : `-₺${Math.abs(diff).toLocaleString("tr-TR")}`})
+            </span>
+          </div>
+          <div className="text-[10px] text-muted-foreground font-mono">
+            ↵ Kaydet • Esc İptal
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      onClick={onStartEdit}
+      className="group/price cursor-pointer p-1.5 -m-1.5 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors inline-block space-y-0.5"
+      title="Fiyatı doğrudan düzenlemek için tıklayın"
+    >
+      <div className="flex items-center gap-1.5">
+        <p className="text-sm font-bold text-gray-900 group-hover/price:text-emerald-700 transition-colors">
+          {new Intl.NumberFormat("tr-TR", {
+            style: "currency",
+            currency: "TRY",
+          }).format(outfit.price)}
+        </p>
+        <Edit2 className="w-3 h-3 text-slate-400 opacity-0 group-hover/price:opacity-100 transition-opacity" />
+      </div>
+      {outfit.showDiscountBadge && sumOriginal > outfit.price && (
+        <p className="text-[10px] text-muted-foreground line-through">
+          {new Intl.NumberFormat("tr-TR", {
+            style: "currency",
+            currency: "TRY",
+          }).format(sumOriginal)}
+        </p>
+      )}
+      {outfit.showDiscountBadge && savings > 0 && (
+        <p className="text-[10px] font-semibold text-emerald-600">
+          +{new Intl.NumberFormat("tr-TR", {
+            style: "currency",
+            currency: "TRY",
+          }).format(savings)}{" "}
+          Avantaj
+        </p>
+      )}
+    </div>
+  );
+}
+
 export default function OutfitsPage() {
   const router = useRouter();
   const pathname = usePathname();
@@ -98,11 +278,17 @@ export default function OutfitsPage() {
   const [editingOutfit, setEditingOutfit] = useState<Outfit | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
 
+  // Doğrudan Satır İçi Fiyat Düzenleme
+  const updateOutfitPriceMutation = useUpdateOutfitPrice();
+  const [editingPriceOutfitId, setEditingPriceOutfitId] = useState<number | null>(null);
+
   // Form State
   const [title, setTitle] = useState("");
   const [slug, setSlug] = useState("");
   const [description, setDescription] = useState("");
   const [coverImageUrl, setCoverImageUrl] = useState("");
+  const [coverImageFile, setCoverImageFile] = useState<File | null>(null);
+  const [coverImagePreview, setCoverImagePreview] = useState<string>("");
   const [price, setPrice] = useState<number>(0);
   const [showDiscountBadge, setShowDiscountBadge] = useState(false);
   const [displayOrder, setDisplayOrder] = useState(0);
@@ -200,11 +386,36 @@ export default function OutfitsPage() {
   // 3. Create / Update Mutation
   const saveMutation = useMutation({
     mutationFn: async () => {
+      let finalCoverImageUrl = coverImageUrl;
+
+      if (coverImageFile) {
+        setIsUploadingImage(true);
+        try {
+          const formData = new FormData();
+          formData.append("file", coverImageFile);
+          const res = await axiosInstance.post("/api/uploads/image", formData, {
+            headers: { "Content-Type": "multipart/form-data" },
+          });
+          const uploadedUrl = res.data?.url || res.data?.Url || (typeof res.data === "string" ? res.data : "");
+          if (uploadedUrl) {
+            finalCoverImageUrl = uploadedUrl;
+          }
+        } catch {
+          throw new Error("Görsel yüklenirken bir hata oluştu.");
+        } finally {
+          setIsUploadingImage(false);
+        }
+      }
+
+      if (!finalCoverImageUrl) {
+        throw new Error("Lütfen kombin için bir görsel belirleyin.");
+      }
+
       const payload = {
         title,
         slug: slug.trim() || undefined,
         description,
-        coverImageUrl,
+        coverImageUrl: finalCoverImageUrl,
         price: Number(price),
         showDiscountBadge,
         displayOrder: Number(displayOrder),
@@ -227,9 +438,11 @@ export default function OutfitsPage() {
       toast.success(editingOutfit ? "Kombin güncellendi!" : "Yeni kombin oluşturuldu!");
       queryClient.invalidateQueries({ queryKey: ["admin-outfits"] });
       setIsModalOpen(false);
+      setCoverImageFile(null);
+      setCoverImagePreview("");
     },
     onError: (err: any) => {
-      toast.error(err.response?.data?.message || "Kombin kaydedilirken bir hata oluştu.");
+      toast.error(err.message || err.response?.data?.message || "Kombin kaydedilirken bir hata oluştu.");
     },
   });
 
@@ -255,6 +468,8 @@ export default function OutfitsPage() {
     setSlug("");
     setDescription("");
     setCoverImageUrl("");
+    setCoverImageFile(null);
+    setCoverImagePreview("");
     setPrice(0);
     setShowDiscountBadge(false);
     setDisplayOrder(0);
@@ -279,6 +494,8 @@ export default function OutfitsPage() {
     setSlug(outfit.slug);
     setDescription(outfit.description || "");
     setCoverImageUrl(outfit.coverImageUrl);
+    setCoverImageFile(null);
+    setCoverImagePreview("");
     setPrice(outfit.price);
     setShowDiscountBadge(outfit.showDiscountBadge);
     setDisplayOrder(outfit.displayOrder);
@@ -298,28 +515,19 @@ export default function OutfitsPage() {
     setIsModalOpen(true);
   };
 
-  // Lookbook Cover Upload to MinIO
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Lookbook Cover Select (Local Preview only - Upload happens on Save)
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    setIsUploadingImage(true);
-    try {
-      const formData = new FormData();
-      formData.append("file", file);
-      const res = await axiosInstance.post("/api/uploads/image", formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
-      const url = res.data?.url || res.data?.Url || (typeof res.data === "string" ? res.data : "");
-      if (url) {
-        setCoverImageUrl(url);
-        toast.success("Kapak görseli yüklendi!");
-      }
-    } catch {
-      toast.error("Görsel yüklenirken hata oluştu.");
-    } finally {
-      setIsUploadingImage(false);
-    }
+    setCoverImageFile(file);
+    setCoverImagePreview(URL.createObjectURL(file));
+  };
+
+  const handleRemoveCoverImage = () => {
+    setCoverImageFile(null);
+    setCoverImagePreview("");
+    setCoverImageUrl("");
   };
 
   // Add Product & Color to Outfit
@@ -451,29 +659,32 @@ export default function OutfitsPage() {
     {
       accessorKey: "price",
       header: "Fiyat",
-      cell: ({ row }) => {
-        const outfit = row.original;
-        const sumOriginal = outfit.totalOriginalPrice || outfit.items?.reduce((s, i) => s + (i.productDiscountPrice ?? i.productBasePrice), 0) || 0;
-        const savings = Math.max(0, sumOriginal - outfit.price);
-
-        return (
-          <div className="space-y-0.5">
-            <p className="text-xs font-bold text-gray-900">
-              {new Intl.NumberFormat("tr-TR", { style: "currency", currency: "TRY" }).format(outfit.price)}
-            </p>
-            {outfit.showDiscountBadge && sumOriginal > outfit.price && (
-              <p className="text-[10px] text-muted-foreground line-through">
-                {new Intl.NumberFormat("tr-TR", { style: "currency", currency: "TRY" }).format(sumOriginal)}
-              </p>
-            )}
-            {outfit.showDiscountBadge && savings > 0 && (
-              <p className="text-[10px] font-semibold text-emerald-600">
-                +{new Intl.NumberFormat("tr-TR", { style: "currency", currency: "TRY" }).format(savings)} Avantaj
-              </p>
-            )}
-          </div>
-        );
-      },
+      cell: ({ row }) => (
+        <InlineOutfitPriceCell
+          outfit={row.original}
+          isEditing={editingPriceOutfitId === row.original.id}
+          onStartEdit={() => setEditingPriceOutfitId(row.original.id)}
+          onCancel={() => setEditingPriceOutfitId(null)}
+          onSave={async (price) => {
+            try {
+              await updateOutfitPriceMutation.mutateAsync({
+                id: row.original.id,
+                price,
+              });
+              toast.success("Kombin fiyatı başarıyla güncellendi.");
+              setEditingPriceOutfitId(null);
+            } catch (error: any) {
+              const msg =
+                error?.response?.data?.Message ||
+                error?.response?.data?.message ||
+                (typeof error?.response?.data === "string" ? error?.response?.data : null) ||
+                "Fiyat güncellenirken bir hata oluştu.";
+              toast.error(msg);
+            }
+          }}
+          isPending={updateOutfitPriceMutation.isPending}
+        />
+      ),
     },
     {
       accessorKey: "showDiscountBadge",
@@ -544,7 +755,7 @@ export default function OutfitsPage() {
         );
       },
     },
-  ], []);
+  ], [editingPriceOutfitId, updateOutfitPriceMutation.isPending]);
 
   return (
     <div className="space-y-6">
@@ -710,28 +921,46 @@ export default function OutfitsPage() {
                     <span className="w-5 h-5 rounded-full bg-primary text-white text-[10px] font-bold flex items-center justify-center shrink-0">2</span>
                     <span className="text-xs font-bold text-gray-800 uppercase tracking-wide">Kombin Fotoğrafı</span>
                   </div>
-                  {coverImageUrl && (
-                    <label className="cursor-pointer text-[11px] font-medium text-primary hover:underline flex items-center gap-1">
-                      <UploadCloud size={12} />
-                      Değiştir
-                      <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
-                    </label>
+                  {(coverImagePreview || coverImageUrl) && (
+                    <div className="flex items-center gap-2.5">
+                      <label className="cursor-pointer text-[11px] font-medium text-primary hover:underline flex items-center gap-1">
+                        <UploadCloud size={12} />
+                        Değiştir
+                        <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
+                      </label>
+                      <button
+                        type="button"
+                        onClick={handleRemoveCoverImage}
+                        className="text-[11px] font-medium text-red-500 hover:text-red-700 hover:underline flex items-center gap-0.5"
+                      >
+                        <X size={12} />
+                        Kaldır
+                      </button>
+                    </div>
                   )}
                 </div>
 
-                {coverImageUrl ? (
+                {coverImagePreview || coverImageUrl ? (
                   <div className="relative group rounded-2xl overflow-hidden border border-gray-200 shadow-2xs max-w-[190px] h-[210px] mx-auto bg-gray-100 flex items-center justify-center">
                     <img
-                      src={getMinioUrl(coverImageUrl)}
+                      src={coverImagePreview || getMinioUrl(coverImageUrl)}
                       alt="Kapak"
                       className="w-full h-full object-cover"
                     />
-                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center">
+                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center gap-2">
                       <label className="cursor-pointer bg-white/95 text-gray-800 text-xs font-semibold px-3 py-1.5 rounded-xl shadow-md flex items-center gap-1.5 hover:bg-white transition-all">
                         <UploadCloud size={13} />
                         Değiştir
                         <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
                       </label>
+                      <button
+                        type="button"
+                        onClick={handleRemoveCoverImage}
+                        className="bg-red-50 text-red-600 hover:bg-red-100 text-xs font-semibold p-1.5 rounded-xl shadow-md flex items-center justify-center transition-all"
+                        title="Fotoğrafı Kaldır"
+                      >
+                        <Trash2 size={14} />
+                      </button>
                     </div>
                     {isUploadingImage && (
                       <div className="absolute inset-0 bg-white/80 flex items-center justify-center">
@@ -1075,7 +1304,7 @@ export default function OutfitsPage() {
           <div className="flex items-center justify-between px-7 py-4 border-t border-gray-100 bg-white">
             <p className="text-[11px] text-muted-foreground">
               {selectedItems.length === 0 && "En az 1 parça ekleyiniz"}
-              {!coverImageUrl && selectedItems.length > 0 && "Kombin fotoğrafı zorunludur"}
+              {!(coverImageFile || coverImageUrl) && selectedItems.length > 0 && "Kombin fotoğrafı zorunludur"}
               {!title && "Kombin başlığı zorunludur"}
             </p>
             <div className="flex items-center gap-2.5">
@@ -1090,10 +1319,10 @@ export default function OutfitsPage() {
               <Button
                 type="button"
                 onClick={() => saveMutation.mutate()}
-                disabled={saveMutation.isPending || !title || !coverImageUrl || selectedItems.length === 0}
+                disabled={saveMutation.isPending || isUploadingImage || !title || !(coverImageFile || coverImageUrl) || selectedItems.length === 0}
                 className="h-9 px-5 bg-primary text-primary-foreground hover:bg-primary/90 rounded-xl text-xs font-semibold shadow-sm"
               >
-                {saveMutation.isPending ? (
+                {saveMutation.isPending || isUploadingImage ? (
                   <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> Kaydediliyor...</>
                 ) : editingOutfit ? (
                   <><Check className="h-3.5 w-3.5 mr-1.5" /> Değişiklikleri Kaydet</>

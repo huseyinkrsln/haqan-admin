@@ -103,6 +103,18 @@ export function useUpdateProduct() {
   });
 }
 
+export function useUpdateProductPrice() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (dto: { productId: number; basePrice: number; discountPrice?: number }) =>
+      axiosInstance.put("/api/products/update-price", dto),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["products"] });
+      queryClient.invalidateQueries({ queryKey: ["product", variables.productId] });
+    },
+  });
+}
+
 export function useDeleteProduct() {
   const queryClient = useQueryClient();
   return useMutation({

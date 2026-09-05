@@ -7,9 +7,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { useSession } from "next-auth/react";
-import { Plus, Trash2, ChevronLeft, ChevronRight, Eye, PackagePlus, Boxes, RefreshCw } from "lucide-react";
+import { Plus, Trash2, ChevronLeft, ChevronRight, Eye, PackagePlus, Boxes, RefreshCw, Pencil } from "lucide-react";
 import { ProductWizardDialog } from "@/components/admin/product-wizard-dialog";
 import { QuickStockDialog } from "@/components/admin/quick-stock-dialog";
+import { QuickPriceDialog } from "@/components/admin/quick-price-dialog";
 import { toast } from "sonner";
 import Link from "next/link";
 import {
@@ -47,7 +48,7 @@ import {
 } from "@/hooks/useProducts";
 import { Product, CreateComplexProductDto } from "@/types/api.types";
 
-import { getMinioUrl } from "@/lib/utils";
+import { getMinioUrl, cn } from "@/lib/utils";
 
 export default function ProductsPage() {
   const { data: session } = useSession();
@@ -57,6 +58,7 @@ export default function ProductsPage() {
 
   const [isWizardOpen, setIsWizardOpen] = useState(false);
   const [stockModalProductId, setStockModalProductId] = useState<number | null>(null);
+  const [priceModalProduct, setPriceModalProduct] = useState<Product | null>(null);
   const [productToDelete, setProductToDelete] = useState<Product | null>(null);
   const [search, setSearch] = useState(urlSearch);
   const [debouncedSearch, setDebouncedSearch] = useState(urlSearch);
@@ -253,23 +255,51 @@ export default function ProductsPage() {
                             </div>
                           </div>
                         </TableCell>
-                        <TableCell className="font-medium">
-                          {new Intl.NumberFormat("tr-TR", {
-                            style: "currency",
-                            currency: "TRY",
-                          }).format(product.basePrice)}
-                        </TableCell>
                         <TableCell>
-                          {product.discountPrice ? (
-                            <span className="text-emerald-600 dark:text-emerald-400 font-semibold">
+                          <button
+                            type="button"
+                            onClick={() => role !== "VIEWER" && setPriceModalProduct(product)}
+                            className={cn(
+                              "group inline-flex items-center gap-1.5 text-left focus:outline-none px-2 py-1 -mx-2 -my-1 rounded-md transition-all",
+                              role !== "VIEWER" ? "cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800" : "cursor-default"
+                            )}
+                            title={role !== "VIEWER" ? "Fiyatı Düzenle & Kombin Yönetimi" : undefined}
+                          >
+                            <span className="font-semibold text-sm text-foreground group-hover:text-primary transition-colors">
                               {new Intl.NumberFormat("tr-TR", {
                                 style: "currency",
                                 currency: "TRY",
-                              }).format(product.discountPrice)}
+                              }).format(product.basePrice)}
                             </span>
-                          ) : (
-                            <span className="text-muted-foreground text-xs">—</span>
-                          )}
+                            {role !== "VIEWER" && (
+                              <Pencil className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 group-hover:text-primary transition-all shrink-0" />
+                            )}
+                          </button>
+                        </TableCell>
+                        <TableCell>
+                          <button
+                            type="button"
+                            onClick={() => role !== "VIEWER" && setPriceModalProduct(product)}
+                            className={cn(
+                              "group inline-flex items-center gap-1.5 text-left focus:outline-none px-2 py-1 -mx-2 -my-1 rounded-md transition-all",
+                              role !== "VIEWER" ? "cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800" : "cursor-default"
+                            )}
+                            title={role !== "VIEWER" ? "Fiyatı Düzenle & Kombin Yönetimi" : undefined}
+                          >
+                            {product.discountPrice ? (
+                              <span className="text-emerald-600 dark:text-emerald-400 font-semibold text-sm">
+                                {new Intl.NumberFormat("tr-TR", {
+                                  style: "currency",
+                                  currency: "TRY",
+                                }).format(product.discountPrice)}
+                              </span>
+                            ) : (
+                              <span className="text-muted-foreground text-xs">—</span>
+                            )}
+                            {role !== "VIEWER" && (
+                              <Pencil className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 group-hover:text-primary transition-all shrink-0" />
+                            )}
+                          </button>
                         </TableCell>
                         <TableCell>
                           <button
@@ -463,6 +493,12 @@ export default function ProductsPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      {/* Hızlı Fiyat & Kombin Modalı */}
+      <QuickPriceDialog
+        product={priceModalProduct}
+        open={Boolean(priceModalProduct)}
+        onOpenChange={(open) => !open && setPriceModalProduct(null)}
+      />
     </div>
   );
 }
