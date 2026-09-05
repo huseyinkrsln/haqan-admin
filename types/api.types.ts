@@ -101,16 +101,17 @@ export interface Category extends BaseEntity {
   imageUrl1?: string;
   imageUrl2?: string;
   slug: string;
+  icon?: string;
   sizeGroupId?: number | null;
   sizeGroupName?: string;
 }
 
-export interface CreateCategoryDto extends Pick<Category, "name" | "parentCategoryId" | "description" | "slug" | "sizeGroupId"> {
+export interface CreateCategoryDto extends Pick<Category, "name" | "parentCategoryId" | "description" | "slug" | "icon" | "sizeGroupId"> {
   image1?: File;
   image2?: File;
 }
 
-export interface UpdateCategoryDto extends Pick<Category, "id" | "name" | "parentCategoryId" | "description" | "slug" | "sizeGroupId"> {
+export interface UpdateCategoryDto extends Pick<Category, "id" | "name" | "parentCategoryId" | "description" | "slug" | "icon" | "sizeGroupId"> {
   image1?: File;
   image2?: File;
 }
@@ -459,6 +460,10 @@ export interface Cart extends BaseEntity {
   userFullName?: string;
   userEmail?: string;
   expiresAt: string;
+  totalItemCount?: number;
+  hasOutfit?: boolean;
+  outfitTitles?: string[];
+  totalAmount?: number;
 }
 
 export interface CartItem extends BaseEntity {
@@ -467,6 +472,7 @@ export interface CartItem extends BaseEntity {
   quantity: number;
   productId?: number;
   productName?: string;
+  productSlug?: string;
   productCode?: string;
   colorName?: string;
   colorHexCode?: string;
@@ -474,6 +480,10 @@ export interface CartItem extends BaseEntity {
   sku?: string;
   imageUrl?: string;
   price?: number;
+  outfitId?: number;
+  outfitTitle?: string;
+  outfitCoverImageUrl?: string;
+  outfitPrice?: number;
 }
 
 // ─── Favorites ───────────────────────────────────────────────────────────────
@@ -487,6 +497,25 @@ export interface ProductFavorite extends BaseEntity {
   userFullName?: string;
   userEmail?: string;
   createdDate?: string;
+}
+
+export interface OutfitFavorite extends BaseEntity {
+  userId: number;
+  outfitId: number;
+  outfitTitle?: string;
+  outfitSlug?: string;
+  coverImageUrl?: string;
+  price?: number;
+  itemCount?: number;
+  userFullName?: string;
+  userEmail?: string;
+  createdDate?: string;
+}
+
+export interface FavoriteCounts {
+  productFavoritesCount: number;
+  outfitFavoritesCount: number;
+  totalCount: number;
 }
 
 // ─── Roles & Permissions ─────────────────────────────────────────────────────
@@ -632,5 +661,24 @@ export interface SiteSettingBulkItemDto {
 
 export interface BulkUpdateSiteSettingDto {
   settings: SiteSettingBulkItemDto[];
+}
+
+// ─── Product Picker ──────────────────────────────────────────────────────────
+
+export interface ProductPickerColorDto {
+  productColorId: number;
+  colorId: number;
+  colorName: string;
+  hexCode?: string;
+  imageUrl?: string;
+}
+
+export interface ProductPickerDto {
+  id: number;
+  name: string;
+  basePrice: number;
+  discountPrice?: number | null;
+  primaryImageUrl?: string;
+  colors: ProductPickerColorDto[];
 }
 

@@ -57,7 +57,7 @@ export function CategoryProductGroupsDialog({
 }: CategoryProductGroupsDialogProps) {
   const categoryId = category?.id;
 
-  const { data: groups, isLoading } = useProductGroups(categoryId);
+  const { data: groups, isLoading, refetch } = useProductGroups(categoryId);
   const createMutation = useCreateProductGroup();
   const updateMutation = useUpdateProductGroup();
   const deleteMutation = useDeleteProductGroup();
@@ -131,7 +131,10 @@ export function CategoryProductGroupsDialog({
           categoryId: categoryId,
         },
         {
-          onSuccess: () => resetForm(),
+          onSuccess: () => {
+            resetForm();
+            refetch();
+          },
         }
       );
     } else {
@@ -143,7 +146,10 @@ export function CategoryProductGroupsDialog({
           categoryId: categoryId,
         },
         {
-          onSuccess: () => resetForm(),
+          onSuccess: () => {
+            resetForm();
+            refetch();
+          },
         }
       );
     }
@@ -153,7 +159,10 @@ export function CategoryProductGroupsDialog({
     if (!toDeleteGroup) return;
     const targetId = toDeleteGroup.id ?? (toDeleteGroup as any).Id;
     deleteMutation.mutate(targetId, {
-      onSuccess: () => setToDeleteGroup(null),
+      onSuccess: () => {
+        setToDeleteGroup(null);
+        refetch();
+      },
     });
   };
 
@@ -176,7 +185,7 @@ export function CategoryProductGroupsDialog({
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-w-4xl max-h-[88vh] flex flex-col">
+        <DialogContent className="sm:max-w-4xl w-full max-h-[88vh] flex flex-col">
           <DialogHeader>
             <div className="flex items-center justify-between pr-6">
               <DialogTitle className="flex items-center gap-2 text-lg">
@@ -307,15 +316,15 @@ export function CategoryProductGroupsDialog({
                 )}
               </div>
             ) : (
-              <div className="border rounded-xl overflow-hidden shadow-2xs">
-                <table className="w-full text-left text-xs border-collapse">
+              <div className="border rounded-xl overflow-x-auto shadow-2xs">
+                <table className="w-full text-left text-xs border-collapse min-w-[620px]">
                   <thead>
                     <tr className="bg-muted/50 border-b text-muted-foreground uppercase tracking-wider font-semibold text-[11px]">
                       <th className="py-2.5 px-4 w-12 text-center">#</th>
                       <th className="py-2.5 px-4">Grup Adı</th>
                       <th className="py-2.5 px-4">Slug (URL)</th>
                       <th className="py-2.5 px-4">Açıklama</th>
-                      <th className="py-2.5 px-4 text-right w-24">İşlemler</th>
+                      <th className="py-2.5 px-4 text-center w-32">İşlemler</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
@@ -342,28 +351,30 @@ export function CategoryProductGroupsDialog({
                               /{groupSlug}
                             </Badge>
                           </td>
-                          <td className="py-3 px-4 text-muted-foreground truncate max-w-[220px]">
+                          <td className="py-3 px-4 text-muted-foreground truncate max-w-[200px]">
                             {groupDesc}
                           </td>
-                          <td className="py-3 px-4 text-right">
-                            <div className="flex items-center justify-end gap-1">
+                          <td className="py-3 px-4 text-center">
+                            <div className="flex items-center justify-center gap-1.5">
                               <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-7 w-7 text-primary hover:bg-primary/10"
+                                variant="outline"
+                                size="sm"
+                                className="h-7 px-2 text-primary hover:text-primary hover:bg-primary/10 border-primary/20 text-xs"
                                 onClick={() => handleOpenEdit(group)}
                                 title="Düzenle"
                               >
-                                <Edit2 className="h-3.5 w-3.5" />
+                                <Edit2 className="h-3 w-3 mr-1" />
+                                Düzenle
                               </Button>
                               <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-7 w-7 text-destructive hover:bg-destructive/10"
+                                variant="outline"
+                                size="sm"
+                                className="h-7 px-2 text-destructive hover:text-destructive hover:bg-destructive/10 border-destructive/20 text-xs"
                                 onClick={() => setToDeleteGroup(group)}
                                 title="Sil"
                               >
-                                <Trash2 className="h-3.5 w-3.5" />
+                                <Trash2 className="h-3 w-3 mr-1" />
+                                Sil
                               </Button>
                             </div>
                           </td>

@@ -27,6 +27,7 @@ import {
   ShieldCheck,
   Plus,
   MessageSquareWarning,
+  Sparkles,
 } from "lucide-react";
 import { useSession } from "next-auth/react";
 import { Button } from "@/components/ui/button";
@@ -72,6 +73,15 @@ export function Sidebar() {
       canAdd: true,
       addHref: "/admin/products?action=new",
       addTitle: "Yeni Ürün Ekle",
+    },
+    {
+      title: "Kombinler",
+      href: "/admin/outfits",
+      icon: Sparkles,
+      roles: ["SUPER_ADMIN", "EDITOR"],
+      canAdd: true,
+      addHref: "/admin/outfits?action=new",
+      addTitle: "Yeni Kombin Oluştur",
     },
     {
       title: "Kategoriler",
@@ -131,7 +141,7 @@ export function Sidebar() {
       roles: ["SUPER_ADMIN", "EDITOR"],
     },
     {
-      title: "Favori Ürünler",
+      title: "Favoriler",
       href: "/admin/favorites",
       icon: Heart,
       roles: ["SUPER_ADMIN", "EDITOR"],

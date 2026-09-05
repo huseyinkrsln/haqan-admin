@@ -26,7 +26,51 @@ interface CategoryDialogProps {
   onSubmit: (data: any) => void;
 }
 
+import {
+  Layers,
+  Shirt,
+  Footprints,
+  ShoppingBag,
+  Sparkles,
+  Flame,
+  Tag,
+  Crown,
+  Watch,
+  Glasses,
+  Compass,
+  Heart,
+} from "lucide-react";
 import { getMinioUrl } from "@/lib/utils";
+
+const ROOT_CATEGORY_ICONS = [
+  { id: "Layers", label: "Koleksiyon", icon: Layers },
+  { id: "Shirt", label: "Giyim", icon: Shirt },
+  { id: "Footprints", label: "Ayakkabı", icon: Footprints },
+  { id: "ShoppingBag", label: "Çanta / Aks.", icon: ShoppingBag },
+  { id: "Sparkles", label: "Yeni / Trend", icon: Sparkles },
+  { id: "Flame", label: "Popüler", icon: Flame },
+  { id: "Tag", label: "İndirim / Fırsat", icon: Tag },
+  { id: "Crown", label: "Özel Tasarım", icon: Crown },
+  { id: "Watch", label: "Saat", icon: Watch },
+  { id: "Glasses", label: "Gözlük", icon: Glasses },
+  { id: "Compass", label: "Stil / Keşfet", icon: Compass },
+  { id: "Heart", label: "Favoriler", icon: Heart },
+];
+
+function slugify(val: string) {
+  return val
+    .toLowerCase()
+    .replace(/ğ/g, "g")
+    .replace(/ü/g, "u")
+    .replace(/ş/g, "s")
+    .replace(/ı/g, "i")
+    .replace(/ö/g, "o")
+    .replace(/ç/g, "c")
+    .replace(/[^a-z0-9\s-]/g, "")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
+    .trim();
+}
 
 export function CategoryDialog({
   open,
@@ -38,6 +82,7 @@ export function CategoryDialog({
 }: CategoryDialogProps) {
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
+  const [icon, setIcon] = useState<string>("Layers");
   const [parentCategoryId, setParentCategoryId] = useState<string>("");
   const [sizeGroupId, setSizeGroupId] = useState<string>("");
   const [description, setDescription] = useState("");
@@ -56,6 +101,7 @@ export function CategoryDialog({
       refetchSizeGroups();
       setName(initialData?.name || "");
       setSlug(initialData?.slug || "");
+      setIcon(initialData?.icon || "Layers");
       setParentCategoryId(initialData?.parentCategoryId ? String(initialData.parentCategoryId) : "");
       setSizeGroupId(initialData?.sizeGroupId ? String(initialData.sizeGroupId) : "");
       setDescription(initialData?.description || "");
@@ -64,6 +110,11 @@ export function CategoryDialog({
       setTimeout(() => firstInputRef.current?.focus(), 50);
     }
   }, [open, initialData, refetchRootCategories, refetchSizeGroups]);
+
+  const handleNameChange = (val: string) => {
+    setName(val);
+    setSlug(slugify(val));
+  };
 
   // Eğer lookup verisi henüz gelmediyse veya önbellekteyse categories prop'undan ana kategorileri al
   const fallbackRoots = (categories || [])
@@ -75,9 +126,11 @@ export function CategoryDialog({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
+    const isRoot = !parentCategoryId || Number(parentCategoryId) === 0;
     const payload: any = {
       name: name.trim(),
-      slug: slug.trim(),
+      slug: (slug.trim() || slugify(name)).trim(),
+      icon: isRoot ? icon : null,
     };
 
     if (parentCategoryId) payload.parentCategoryId = Number(parentCategoryId);
@@ -108,11 +161,23 @@ export function CategoryDialog({
               id="c-name"
               ref={firstInputRef}
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={(e) => handleNameChange(e.target.value)}
               placeholder="Örn: Erkek Giyim"
               required
               disabled={isPending}
             />
+          </div>
+
+          <div className="space-y-1 bg-muted/40 p-2.5 rounded-lg border border-border/60">
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-medium text-muted-foreground">URL Bağlantısı (Slug):</span>
+              <span className="text-[10px] font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 px-1.5 py-0.5 rounded">
+                Sistem Tarafından Otomatik
+              </span>
+            </div>
+            <p className="text-xs font-mono text-muted-foreground break-all">
+              /koleksiyon/<span className="text-foreground font-semibold">{slugify(name) || (initialData?.slug ? initialData.slug : "...")}</span>
+            </p>
           </div>
 
           <div className="space-y-1.5">
@@ -134,6 +199,45 @@ export function CategoryDialog({
                 ))}
             </select>
           </div>
+
+          {/* Sadece Ana Kategoriler İçin İkon Seçici */}
+          {(!parentCategoryId || Number(parentCategoryId) === 0) && (
+            <div className="space-y-2 p-3 rounded-lg border border-emerald-500/25 bg-emerald-50/40 dark:bg-emerald-950/20 transition-all">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs font-semibold text-emerald-900 dark:text-emerald-300">
+                  Ana Kategori İkonu
+                </Label>
+                <span className="text-[10px] font-medium bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-300 px-1.5 py-0.5 rounded">
+                  Mobil Tab & Menü İkonu
+                </span>
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                Bu kategori mobil alt barda yer aldığında görüntülenecek ikonu seçin:
+              </p>
+              <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 pt-1">
+                {ROOT_CATEGORY_ICONS.map((item) => {
+                  const IconComp = item.icon;
+                  const isSelected = (icon || "Layers") === item.id;
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => setIcon(item.id)}
+                      disabled={isPending}
+                      className={`flex flex-col items-center justify-center p-2 rounded-lg border text-center transition-all ${
+                        isSelected
+                          ? "border-emerald-600 bg-emerald-100/90 text-emerald-900 dark:bg-emerald-900/70 dark:text-emerald-100 font-bold shadow-sm ring-1 ring-emerald-500"
+                          : "border-border/60 bg-background text-muted-foreground hover:bg-accent hover:text-foreground"
+                      }`}
+                    >
+                      <IconComp size={18} className={isSelected ? "stroke-[2.3] text-emerald-700 dark:text-emerald-300" : "stroke-[1.8]"} />
+                      <span className="text-[10px] mt-1 truncate max-w-full">{item.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           <div className="space-y-1.5">
             <Label htmlFor="c-size-group">Beden Grubu (Size Group)</Label>
@@ -167,6 +271,7 @@ export function CategoryDialog({
             />
           </div>
 
+          {/* Resim alanları geçici olarak devre dışı bırakıldı
           <div className="space-y-1.5">
             <Label htmlFor="c-img1">Birincil Görsel (Image 1)</Label>
             {initialData?.imageUrl1 && (
@@ -200,6 +305,7 @@ export function CategoryDialog({
             />
             <p className="text-[10px] text-muted-foreground">Yeni bir dosya seçerseniz mevcut resim değiştirilecektir.</p>
           </div>
+          */}
 
           <DialogFooter className="pt-2">
             <Button

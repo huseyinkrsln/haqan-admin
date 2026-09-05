@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient, useInfiniteQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { axiosInstance } from "@/lib/axios";
 import {
@@ -9,6 +9,7 @@ import {
   ProductVariant,
   ProductImage,
   ProductColor,
+  ProductPickerDto,
 } from "@/types/api.types";
 
 interface UseProductsParams {
@@ -291,4 +292,33 @@ export function useProductPagination() {
   };
 
   return { page, take, goToPage, goToNext, goToPrev, changePageSize };
+}
+
+// ─── Infinite Scroll Products Picker (for Outfits & Combos) ─────────────────
+
+export function useInfiniteProductsPicker(search?: string, enabled = true) {
+  return useInfiniteQuery<PaginatedResult<ProductPickerDto[]>>({
+    queryKey: ["products-picker", search],
+    queryFn: async ({ pageParam = 1 }) => {
+      const res = await axiosInstance.get("/api/products/picker", {
+        params: {
+          page: pageParam,
+          take: 15,
+          search: search?.trim() || undefined,
+        },
+      });
+      return res.data;
+    },
+    initialPageParam: 1,
+    getNextPageParam: (lastPage: any) => {
+      if (!lastPage) return undefined;
+      const currentPage = lastPage.pageNumber ?? lastPage.PageNumber ?? lastPage.page ?? 1;
+      const totalPages = lastPage.totalPages ?? lastPage.TotalPages ?? 1;
+      if (currentPage < totalPages) {
+        return currentPage + 1;
+      }
+      return undefined;
+    },
+    enabled,
+  });
 }

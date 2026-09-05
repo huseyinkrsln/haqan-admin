@@ -59,6 +59,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
   DialogTrigger,
   DialogFooter,
 } from "@/components/ui/dialog";
@@ -95,6 +96,7 @@ import { useSizes } from "@/hooks/useSizes";
 import { useSizeGroups } from "@/hooks/useSizeGroups";
 import { useProductGroups } from "@/hooks/useProductGroups";
 import { useFeatures } from "@/hooks/useFeatures";
+import { useOutfitsByProductId, useBulkUpdateOutfitPrices } from "@/hooks/useOutfits";
 import { UpdateProductDto } from "@/types/api.types";
 
 import { getMinioUrl } from "@/lib/utils";
@@ -118,8 +120,8 @@ function formatCategoryBreadcrumb(category: any, allCategories: any[] = []): str
   return name;
 }
 
-const getImageUrl = (url: string) => {
-  if (!url) return "/placeholder-image.jpg";
+const getImageUrl = (url?: string | null) => {
+  if (!url) return "";
   return getMinioUrl(url);
 };
 
@@ -224,6 +226,69 @@ export default function ProductDetailPage() {
     toast.success("Değerler tüm seçili varyantlara uygulandı.");
   };
 
+  const [activeTab, setActiveTab] = useState<"general" | "variants" | "outfits" | "features">("general");
+
+  const handleTabChange = (tab: "general" | "variants" | "outfits" | "features") => {
+    setActiveTab(tab);
+    if (tab === "outfits") {
+      setShouldFetchOutfits(true);
+      refetchProductOutfits();
+    }
+  };
+
+  const [isOutfitsModalOpen, setIsOutfitsModalOpen] = useState(false);
+  const [isPriceChangeTriggered, setIsPriceChangeTriggered] = useState(false);
+  const [shouldFetchOutfits, setShouldFetchOutfits] = useState(false);
+
+  // Kombin verisi sayfa ilk açıldığında otomatik gelmez, sadece butona tıklandığında veya fiyat değiştiğinde çekilir
+  const {
+    data: productOutfits,
+    isLoading: isProductOutfitsLoading,
+    refetch: refetchProductOutfits,
+  } = useOutfitsByProductId(id, activeTab === "outfits" || shouldFetchOutfits);
+
+  const bulkUpdateOutfitPricesMutation = useBulkUpdateOutfitPrices();
+  const [outfitPrices, setOutfitPrices] = useState<Record<number, number>>({});
+  const [isUpdatingOutfitPrices, setIsUpdatingOutfitPrices] = useState(false);
+
+  useEffect(() => {
+    if (productOutfits && productOutfits.length > 0) {
+      setOutfitPrices((prev) => {
+        const next = { ...prev };
+        productOutfits.forEach((o) => {
+          if (next[o.outfitId] === undefined) {
+            next[o.outfitId] = o.currentOutfitPrice;
+          }
+        });
+        return next;
+      });
+    }
+  }, [productOutfits]);
+
+  const handleOpenOutfitsModal = async () => {
+    setIsPriceChangeTriggered(false);
+    setShouldFetchOutfits(true);
+    setIsOutfitsModalOpen(true);
+    refetchProductOutfits();
+  };
+
+  const handleSaveOutfitPrices = async () => {
+    if (!productOutfits || productOutfits.length === 0) return;
+    setIsUpdatingOutfitPrices(true);
+    const updates = productOutfits.map((o) => ({
+      outfitId: o.outfitId,
+      newPrice: Number(outfitPrices[o.outfitId] ?? o.currentOutfitPrice),
+    }));
+    try {
+      await bulkUpdateOutfitPricesMutation.mutateAsync(updates);
+      toast.success("Kombin fiyatları başarıyla güncellendi.");
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || "Kombin fiyatları güncellenirken hata oluştu.");
+    } finally {
+      setIsUpdatingOutfitPrices(false);
+    }
+  };
+
   useEffect(() => {
     if (product) {
       setFormData({
@@ -255,8 +320,27 @@ export default function ProductDetailPage() {
       return;
     }
 
+    // Fiyat değişikliği var mı kontrol et
+    const isPriceChanged =
+      product &&
+      (Number(formData.basePrice) !== Number(product.basePrice) ||
+        Number(formData.discountPrice ?? 0) !== Number(product.discountPrice ?? 0));
+
     updateProductMutation.mutate(formData, {
-      onSuccess: () => toast.success("Ürün bilgileri başarıyla güncellendi."),
+      onSuccess: async () => {
+        toast.success("Ürün bilgileri başarıyla güncellendi.");
+        
+        // Eğer fiyat değiştiyse, dahil olduğu kombinleri kontrol et ve varsa geniş modalda göster
+        if (isPriceChanged) {
+          setShouldFetchOutfits(true);
+          const outfitsRes = await refetchProductOutfits();
+          const list = outfitsRes.data || [];
+          if (list.length > 0) {
+            setIsPriceChangeTriggered(true);
+            setIsOutfitsModalOpen(true);
+          }
+        }
+      },
       onError: (err: any) => {
         const msg =
           err.response?.data?.Message ||
@@ -586,7 +670,7 @@ export default function ProductDetailPage() {
   }
 
   return (
-    <div className="space-y-6 max-w-6xl mx-auto pb-24">
+    <div className="space-y-6 w-full pb-24">
       {/* Sticky Header & Breadcrumb Bar */}
       <div className="sticky top-0 z-30 -mx-4 px-4 py-3 bg-background/80 backdrop-blur-md border-b flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-all">
         <div className="space-y-1">
@@ -628,12 +712,101 @@ export default function ProductDetailPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        
-        {/* Sol Kolon (Temel Bilgiler & Varyantlar) */}
-        <div className="lg:col-span-2 space-y-6">
-          
-          {/* Temel Bilgiler Kartı */}
+      {/* Tab Navigation */}
+      <div className="flex items-center gap-2 border-b border-slate-200/80 pb-3 overflow-x-auto">
+        <button
+          type="button"
+          onClick={() => handleTabChange("general")}
+          className={`flex items-center gap-2.5 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all shrink-0 cursor-pointer ${
+            activeTab === "general"
+              ? "bg-slate-900 text-white shadow-sm"
+              : "text-slate-600 hover:text-slate-900 hover:bg-slate-100 bg-white border border-slate-200/80"
+          }`}
+        >
+          <Package className="w-4 h-4" />
+          <span>Genel Bilgiler & Fiyat</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => handleTabChange("features")}
+          className={`flex items-center gap-2.5 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all shrink-0 cursor-pointer ${
+            activeTab === "features"
+              ? "bg-slate-900 text-white shadow-sm"
+              : "text-slate-600 hover:text-slate-900 hover:bg-slate-100 bg-white border border-slate-200/80"
+          }`}
+        >
+          <BadgeCheck className="w-4 h-4" />
+          <span>Özellikler & Vitrin</span>
+          {(formData.featureIds?.length ?? 0) > 0 && (
+            <Badge
+              variant="outline"
+              className={`text-[10px] px-1.5 py-0 ${
+                activeTab === "features"
+                  ? "bg-white/20 text-white border-transparent"
+                  : "bg-slate-100 text-slate-700 border-slate-200"
+              }`}
+            >
+              {formData.featureIds?.length}
+            </Badge>
+          )}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => handleTabChange("variants")}
+          className={`flex items-center gap-2.5 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all shrink-0 cursor-pointer ${
+            activeTab === "variants"
+              ? "bg-slate-900 text-white shadow-sm"
+              : "text-slate-600 hover:text-slate-900 hover:bg-slate-100 bg-white border border-slate-200/80"
+          }`}
+        >
+          <Layers className="w-4 h-4" />
+          <span>Renkler & Varyantlar</span>
+          <Badge
+            variant="outline"
+            className={`text-[10px] px-1.5 py-0 ${
+              activeTab === "variants"
+                ? "bg-white/20 text-white border-transparent"
+                : "bg-slate-100 text-slate-700 border-slate-200"
+            }`}
+          >
+            {variants.length}
+          </Badge>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => handleTabChange("outfits")}
+          className={`flex items-center gap-2.5 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all shrink-0 cursor-pointer ${
+            activeTab === "outfits"
+              ? "bg-amber-600 text-white shadow-sm"
+              : "text-amber-900 hover:text-amber-950 hover:bg-amber-100/70 bg-amber-50/70 border border-amber-200/80"
+          }`}
+        >
+          <Sparkles className="w-4 h-4" />
+          <span>Dahil Olduğu Kombinler</span>
+          {productOutfits && productOutfits.length > 0 && (
+            <Badge
+              variant="outline"
+              className={`text-[10px] px-1.5 py-0 ${
+                activeTab === "outfits"
+                  ? "bg-white/20 text-white border-transparent"
+                  : "bg-amber-200/80 text-amber-900 border-amber-300"
+              }`}
+            >
+              {productOutfits.length}
+            </Badge>
+          )}
+        </button>
+      </div>
+
+      {/* TAB 1: GENEL BİLGİLER & FİYAT */}
+      {activeTab === "general" && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Sol Kolon (Temel Bilgiler) */}
+          <div className="space-y-6">
+            {/* Temel Bilgiler Kartı */}
           <div className="bg-card border border-slate-200/80 rounded-2xl p-6 shadow-xs space-y-5">
             <div className="flex items-center gap-3 border-b pb-4">
               <div className="w-9 h-9 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
@@ -667,7 +840,7 @@ export default function ProductDetailPage() {
                     setFormData({
                       ...formData,
                       categoryId: Number(val),
-                      productGroupId: undefined, // Kategori değiştiğinde grubu sıfırla
+                      productGroupId: undefined,
                     })
                   }
                 >
@@ -766,6 +939,7 @@ export default function ProductDetailPage() {
                   </SelectContent>
                 </Select>
               </div>
+            </div>
 
               <div className="col-span-full space-y-1.5">
                 <Label className="text-xs font-semibold text-slate-700">Ürün Açıklaması</Label>
@@ -780,270 +954,242 @@ export default function ProductDetailPage() {
               </div>
             </div>
           </div>
+          </div>
+
+          {/* Sağ Kolon (Fiyat & İndirim) */}
+          <div className="space-y-6">
+            {/* Fiyat & İndirim Kartı */}
+            <div className="bg-card border border-slate-200/80 rounded-2xl p-6 shadow-xs space-y-4">
+              <div className="flex items-center gap-3 border-b pb-4">
+                <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                  <Percent className="w-4 h-4" />
+                </div>
+                <div>
+                  <h2 className="text-base font-bold text-slate-900">Fiyat & İndirim</h2>
+                  <p className="text-xs text-muted-foreground">Satış fiyatı ve kampanya tarihleri</p>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold text-slate-700">Taban Satış Fiyatı (TL)</Label>
+                <div className="relative">
+                  <Input 
+                    type="number"
+                    value={formData.basePrice} 
+                    onChange={(e) => setFormData({ ...formData, basePrice: Number(e.target.value) })} 
+                    disabled={isViewer} 
+                    className="font-bold text-lg h-11 pr-10"
+                  />
+                  <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">TL</span>
+                </div>
+              </div>
+
+              <div className="space-y-1.5 pt-1">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs font-semibold text-slate-700">İndirimli Fiyat (Opsiyonel)</Label>
+                  {formData.discountPrice && formData.basePrice > formData.discountPrice && (
+                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                      %{Math.round(((formData.basePrice - formData.discountPrice) / formData.basePrice) * 100)} İndirim
+                    </span>
+                  )}
+                </div>
+                <div className="relative">
+                  <Input 
+                    type="number"
+                    value={formData.discountPrice || ""} 
+                    onChange={(e) => setFormData({ ...formData, discountPrice: e.target.value ? Number(e.target.value) : undefined })} 
+                    disabled={isViewer} 
+                    placeholder="İndirimsiz bırakmak için boş geçin"
+                    className="h-10 text-sm pr-10"
+                  />
+                  <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">TL</span>
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-2 pt-2">
+                <div className="space-y-1">
+                  <Label className="text-[11px] text-muted-foreground font-medium flex items-center gap-1">
+                    <Clock className="w-3 h-3" /> Başlangıç
+                  </Label>
+                  <Input 
+                    type="datetime-local" 
+                    value={formData.discountStartDate ? formData.discountStartDate.slice(0, 16) : ""}
+                    onChange={(e) => setFormData({ ...formData, discountStartDate: e.target.value || undefined })}
+                    disabled={isViewer}
+                    className="text-xs h-8"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-[11px] text-muted-foreground font-medium flex items-center gap-1">
+                    <Clock className="w-3 h-3" /> Bitiş
+                  </Label>
+                  <Input 
+                    type="datetime-local" 
+                    value={formData.discountEndDate ? formData.discountEndDate.slice(0, 16) : ""}
+                    onChange={(e) => setFormData({ ...formData, discountEndDate: e.target.value || undefined })}
+                    disabled={isViewer}
+                    className="text-xs h-8"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
+      )}
 
+      {/* TAB ÖZELLİKLER & VİTRİN */}
+      {activeTab === "features" && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Ürün Özellikleri */}
+          <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-xs space-y-4">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-lg bg-emerald-50 text-emerald-700">
+                  <BadgeCheck className="w-4 h-4" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-bold text-slate-900">Ürün Özellikleri</h2>
+                  <p className="text-[10px] text-muted-foreground">Kumaş, yıkama ve teknik detaylar</p>
+                </div>
+              </div>
+              <Badge variant="secondary" className="text-[10px] font-semibold">
+                {formData.featureIds?.length || 0} seçildi
+              </Badge>
+            </div>
 
+            <div className="space-y-2 max-h-[520px] overflow-y-auto pr-1">
+              {allFeatures.map((f: any) => {
+                const isSelected = formData.featureIds?.includes(f.id) || false;
+                return (
+                  <label
+                    key={f.id}
+                    className={`flex items-center justify-between p-2.5 rounded-xl border transition-all cursor-pointer ${
+                      isSelected
+                        ? "border-primary bg-primary/5 text-primary font-medium shadow-2xs"
+                        : "border-slate-200/70 hover:bg-slate-50/70 text-slate-700"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div
+                        className={`w-4 h-4 flex items-center justify-center border rounded-sm shrink-0 transition-colors ${
+                          isSelected
+                            ? "bg-primary border-primary text-primary-foreground"
+                            : "border-slate-300"
+                        }`}
+                      >
+                        {isSelected && <Check className="w-3 h-3" />}
+                      </div>
+                      {f.icon && (
+                        <div className="w-5 h-5 bg-white border border-slate-200/60 rounded p-0.5 flex items-center justify-center shrink-0">
+                          <img
+                            src={getImageUrl(f.icon)}
+                            alt={f.name}
+                            className="max-w-full max-h-full object-contain"
+                          />
+                        </div>
+                      )}
+                      <span className="text-xs truncate">{f.name}</span>
+                    </div>
+                    <input
+                      type="checkbox"
+                      className="hidden"
+                      checked={isSelected}
+                      disabled={isViewer}
+                      onChange={(e) => {
+                        const current = formData.featureIds || [];
+                        const next = e.target.checked
+                          ? [...current, f.id]
+                          : current.filter((id: number) => id !== f.id);
+                        setFormData({ ...formData, featureIds: next });
+                      }}
+                    />
+                  </label>
+                );
+              })}
 
-                  <Dialog open={isImageDialogOpen} onOpenChange={(open) => {
-                    setIsImageDialogOpen(open);
-                    if (!open) {
-                      setActiveImageColorId(null);
-                      setNewImage({ file: null, globalColorId: "", isMain: false, isProductMain: false });
-                    }
-                  }}>
-                    <DialogContent className="sm:max-w-3xl w-full max-h-[90vh] overflow-y-auto p-6 rounded-2xl bg-white shadow-2xl">
-                      {(() => {
-                        const pc = productColors?.find((p: any) => p.id === activeImageColorId);
-                        const color = globalColors?.find((c: any) => c.id === pc?.colorId);
-                        const activeImages = images?.filter((img: any) => img.productColorId === activeImageColorId) || [];
-                        const canAddMore = activeImages.length < 5;
+              {allFeatures.length === 0 && (
+                <div className="py-4 text-center text-xs text-muted-foreground">
+                  Tanımlı özellik bulunamadı.
+                </div>
+              )}
+            </div>
+          </div>
 
-                        return (
-                          <div className="space-y-6">
-                            {/* Modal Başlığı */}
-                            <div className="flex items-center justify-between pb-4 border-b">
-                              <div className="flex items-center gap-3">
-                                <div 
-                                  className="w-5 h-5 rounded-full border shadow-sm ring-2 ring-slate-100" 
-                                  style={{ backgroundColor: color?.hexCode || "#ccc" }} 
-                                />
-                                <div>
-                                  <DialogTitle className="text-lg font-bold text-slate-900">
-                                    {color ? `${color.name} Görselleri` : "Görselleri Yönet"}
-                                  </DialogTitle>
-                                  <p className="text-xs text-muted-foreground mt-0.5">
-                                    Bu renge ait görselleri görüntüleyebilir, vitrin veya ana renk atayabilirsiniz.
-                                  </p>
-                                </div>
-                              </div>
-                              <Badge 
-                                variant={canAddMore ? "outline" : "destructive"} 
-                                className="font-semibold text-xs px-3 py-1 bg-slate-50"
-                              >
-                                {activeImages.length} / 5 Görsel
-                              </Badge>
-                            </div>
+          {/* Vitrin & Görünürlük */}
+          <div className="bg-card border border-slate-200/80 rounded-2xl p-6 shadow-xs space-y-4">
+            <div className="flex items-center gap-3 border-b pb-4">
+              <div className="w-9 h-9 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center">
+                <Sparkles className="w-4 h-4" />
+              </div>
+              <div>
+                <h2 className="text-base font-bold text-slate-900">Vitrin & Görünürlük</h2>
+                <p className="text-xs text-muted-foreground">Mağazadaki öne çıkarma ayarları</p>
+              </div>
+            </div>
 
-                            {/* 1. Kısım: Mevcut Görseller Galerisi */}
-                            <div>
-                              <div className="flex items-center justify-between mb-3">
-                                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-600 flex items-center gap-1.5">
-                                  <ImageIcon className="w-4 h-4 text-slate-500" /> Mevcut Görseller ({activeImages.length})
-                                </h3>
-                                <span className="text-[11px] text-muted-foreground">İşlem yapmak için görselin üzerine gelin</span>
-                              </div>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between p-2.5 rounded-xl border border-slate-200/80 bg-slate-50/50">
+                <div className="space-y-0.5">
+                  <Label className="text-xs font-semibold text-slate-800 flex items-center gap-1.5 cursor-pointer">
+                    <Star className="w-3.5 h-3.5 text-amber-500" /> Öne Çıkan Ürün
+                  </Label>
+                  <p className="text-[10px] text-muted-foreground">Anasayfa vitrininde görünür.</p>
+                </div>
+                <Switch 
+                  checked={Boolean(formData.isFeatured)}
+                  onCheckedChange={(c) => setFormData({ ...formData, isFeatured: c })}
+                  disabled={isViewer}
+                />
+              </div>
 
-                              {activeImages.length === 0 ? (
-                                <div className="border-2 border-dashed rounded-xl p-8 flex flex-col items-center justify-center text-center bg-slate-50/60 text-slate-400">
-                                  <ImageIcon className="w-8 h-8 text-slate-300 mb-2" />
-                                  <p className="text-xs font-medium text-slate-600">Bu renge ait henüz görsel yüklenmedi.</p>
-                                </div>
-                              ) : (
-                                <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 gap-3.5">
-                                  {activeImages.map((img: any) => (
-                                    <div 
-                                      key={img.id} 
-                                      className="relative group rounded-xl overflow-hidden border border-slate-200 aspect-[3/4] shadow-xs bg-slate-100 transition-all duration-200 hover:shadow-md hover:border-slate-300"
-                                    >
-                                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                                      <img 
-                                        src={getImageUrl(img.imageUrl)} 
-                                        alt="product" 
-                                        className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" 
-                                        onError={(e) => {
-                                          (e.target as HTMLImageElement).src = 'https://placehold.co/400x400?text=Gorsel+Bulunamadi';
-                                        }}
-                                      />
-                                      
-                                      {/* Normal Görünümde Aktif Rozetler */}
-                                      <div className="absolute top-2 left-2 flex flex-col gap-1 items-start z-10 pointer-events-none transition-opacity duration-200 group-hover:opacity-0">
-                                        {img.isProductMain && (
-                                          <span className="inline-flex items-center gap-1 bg-emerald-600/90 backdrop-blur-md text-white text-[9px] font-bold px-2 py-0.5 rounded-full shadow-xs">
-                                            <Star className="w-2.5 h-2.5 fill-current" /> Vitrin
-                                          </span>
-                                        )}
-                                        {img.isMain && (
-                                          <span className="inline-flex items-center gap-1 bg-amber-600/90 backdrop-blur-md text-white text-[9px] font-bold px-2 py-0.5 rounded-full shadow-xs">
-                                            <Palette className="w-2.5 h-2.5" /> Ana Renk
-                                          </span>
-                                        )}
-                                      </div>
+              <div className="flex items-center justify-between p-2.5 rounded-xl border border-slate-200/80 bg-slate-50/50">
+                <div className="space-y-0.5">
+                  <Label className="text-xs font-semibold text-slate-800 flex items-center gap-1.5 cursor-pointer">
+                    <TrendingUp className="w-3.5 h-3.5 text-rose-500" /> Çok Satanlar
+                  </Label>
+                  <p className="text-[10px] text-muted-foreground">Trendler listesinde görünür.</p>
+                </div>
+                <Switch 
+                  checked={Boolean(formData.isBestSeller)}
+                  onCheckedChange={(c) => setFormData({ ...formData, isBestSeller: c })}
+                  disabled={isViewer}
+                />
+              </div>
 
-                                      {/* Hover Durumunda Açılan Eylemler */}
-                                      {!isViewer && (
-                                        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-black/60 backdrop-blur-[2px] opacity-0 group-hover:opacity-100 transition-all duration-200 flex flex-col justify-between p-2 z-20">
-                                          <div className="flex justify-end">
-                                            <button 
-                                              type="button"
-                                              onClick={(e) => {
-                                                e.stopPropagation();
-                                                setImageToDelete(img.id);
-                                              }}
-                                              className="h-6 w-6 rounded-full bg-red-500/90 hover:bg-red-600 text-white flex items-center justify-center shadow-md transition-transform active:scale-95 hover:scale-105"
-                                              title="Görseli Sil"
-                                            >
-                                              <Trash2 className="w-3 h-3" />
-                                            </button>
-                                          </div>
+              <div className="flex items-center justify-between p-2.5 rounded-xl border border-slate-200/80 bg-slate-50/50">
+                <div className="space-y-0.5">
+                  <Label className="text-xs font-semibold text-slate-800 flex items-center gap-1.5 cursor-pointer">
+                    <Clock className="w-3.5 h-3.5 text-indigo-500" /> Yeni Gelenler
+                  </Label>
+                  <p className="text-[10px] text-muted-foreground">Yeni sezon listesinde görünür.</p>
+                </div>
+                <Switch 
+                  checked={Boolean(formData.isNewArrival)}
+                  onCheckedChange={(c) => setFormData({ ...formData, isNewArrival: c })}
+                  disabled={isViewer}
+                />
+              </div>
 
-                                          <div className="flex flex-col gap-1 w-full">
-                                            <button
-                                              type="button"
-                                              onClick={(e) => {
-                                                e.stopPropagation();
-                                                handleToggleImageFlags(img, "isProductMain", !img.isProductMain);
-                                              }}
-                                              className={`w-full py-1 px-1 rounded-md text-[10px] font-semibold flex items-center justify-center gap-1 transition-all shadow-xs active:scale-95 ${
-                                                img.isProductMain 
-                                                  ? 'bg-emerald-600 text-white ring-1 ring-emerald-400' 
-                                                  : 'bg-white/20 hover:bg-white/35 text-white backdrop-blur-md border border-white/20'
-                                              }`}
-                                            >
-                                              <Star className="w-2.5 h-2.5" fill={img.isProductMain ? "currentColor" : "none"} />
-                                              <span>{img.isProductMain ? "Vitrin" : "Vitrin Yap"}</span>
-                                            </button>
-
-                                            <button
-                                              type="button"
-                                              onClick={(e) => {
-                                                e.stopPropagation();
-                                                handleToggleImageFlags(img, "isMain", !img.isMain);
-                                              }}
-                                              className={`w-full py-1 px-1 rounded-md text-[10px] font-semibold flex items-center justify-center gap-1 transition-all shadow-xs active:scale-95 ${
-                                                img.isMain 
-                                                  ? 'bg-amber-600 text-white ring-1 ring-amber-400' 
-                                                  : 'bg-white/20 hover:bg-white/35 text-white backdrop-blur-md border border-white/20'
-                                              }`}
-                                            >
-                                              <Palette className="w-2.5 h-2.5" />
-                                              <span>{img.isMain ? "Ana Renk" : "Ana Renk Yap"}</span>
-                                            </button>
-                                          </div>
-                                        </div>
-                                      )}
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-
-                            {/* 2. Kısım: Yeni Görsel Ekle Formu */}
-                            <div className="pt-5 border-t space-y-4">
-                              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-600 flex items-center gap-1.5">
-                                <UploadCloud className="w-4 h-4 text-slate-500" /> Yeni Görsel Yükle
-                              </h3>
-
-                              {!canAddMore ? (
-                                <div className="p-3.5 rounded-xl bg-orange-50 border border-orange-200 text-orange-800 text-xs flex items-center gap-2">
-                                  <AlertCircle className="w-4 h-4 text-orange-600 shrink-0" />
-                                  <span>Bu renk için maksimum 5 görsel sınırına ulaşıldı. Yeni görsel yüklemek için önce mevcut bir görseli silin.</span>
-                                </div>
-                              ) : (
-                                <form onSubmit={handleAddImage} className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center bg-slate-50/80 p-4 rounded-xl border border-slate-200/80">
-                                  {/* Dosya Seçme / Önizleme (5 Kolon) */}
-                                  <div className="md:col-span-5">
-                                    {!newImage.file ? (
-                                      <label className="border-2 border-dashed border-slate-300 hover:border-primary/50 hover:bg-primary/5 rounded-xl p-3 flex items-center justify-center gap-2.5 cursor-pointer transition-all text-center">
-                                        <UploadCloud className="w-5 h-5 text-slate-400" />
-                                        <div>
-                                          <p className="text-xs font-semibold text-slate-700">Dosya Seçin</p>
-                                          <p className="text-[10px] text-muted-foreground">PNG, JPG, WEBP</p>
-                                        </div>
-                                        <input 
-                                          type="file" 
-                                          accept="image/*"
-                                          className="hidden"
-                                          onChange={(e) => setNewImage({ ...newImage, file: e.target.files?.[0] || null })}
-                                        />
-                                      </label>
-                                    ) : (
-                                      <div className="flex items-center gap-2.5 p-2 rounded-xl bg-white border border-slate-200 shadow-2xs">
-                                        <div className="w-10 h-10 rounded-lg overflow-hidden border border-slate-100 bg-slate-50 shrink-0">
-                                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                                          <img 
-                                            src={URL.createObjectURL(newImage.file)} 
-                                            alt="Preview" 
-                                            className="w-full h-full object-cover"
-                                          />
-                                        </div>
-                                        <div className="flex-1 min-w-0">
-                                          <p className="text-xs font-medium text-slate-800 truncate">{newImage.file.name}</p>
-                                          <p className="text-[10px] text-muted-foreground">{(newImage.file.size / 1024).toFixed(0)} KB</p>
-                                        </div>
-                                        <Button 
-                                          type="button" 
-                                          variant="ghost" 
-                                          size="icon" 
-                                          className="h-6 w-6 text-slate-400 hover:text-red-600 rounded-full"
-                                          onClick={() => setNewImage({ ...newImage, file: null })}
-                                        >
-                                          <X className="w-3.5 h-3.5" />
-                                        </Button>
-                                      </div>
-                                    )}
-                                  </div>
-
-                                  {/* Seçenek Anahtarları (4 Kolon) */}
-                                  <div className="md:col-span-4 space-y-2">
-                                    <div className="flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-white border border-slate-200/80">
-                                      <Label className="text-[11px] font-medium flex items-center gap-1.5 cursor-pointer">
-                                        <Star className="w-3 h-3 text-emerald-600" /> Vitrin Görseli
-                                      </Label>
-                                      <Switch 
-                                        checked={newImage.isProductMain}
-                                        onCheckedChange={(c) => setNewImage({ ...newImage, isProductMain: c })}
-                                        className="scale-75"
-                                      />
-                                    </div>
-                                    <div className="flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-white border border-slate-200/80">
-                                      <Label className="text-[11px] font-medium flex items-center gap-1.5 cursor-pointer">
-                                        <Palette className="w-3 h-3 text-amber-600" /> Ana Renk Görseli
-                                      </Label>
-                                      <Switch 
-                                        checked={newImage.isMain}
-                                        onCheckedChange={(c) => setNewImage({ ...newImage, isMain: c })}
-                                        className="scale-75"
-                                      />
-                                    </div>
-                                  </div>
-
-                                  {/* Yükle Butonu (3 Kolon) */}
-                                  <div className="md:col-span-3">
-                                    <Button 
-                                      type="submit" 
-                                      className="w-full h-10 font-semibold text-xs shadow-sm"
-                                      disabled={!newImage.file || addProductImageMutation.isPending}
-                                    >
-                                      {addProductImageMutation.isPending ? (
-                                        <Spinner size="sm" className="mr-1.5" />
-                                      ) : (
-                                        <Upload className="w-3.5 h-3.5 mr-1.5" />
-                                      )}
-                                      Görseli Yükle
-                                    </Button>
-                                  </div>
-                                </form>
-                              )}
-                            </div>
-
-                            {/* Modal Kapat Butonu */}
-                            <div className="flex justify-end pt-2">
-                              <Button 
-                                type="button" 
-                                variant="outline" 
-                                size="sm"
-                                onClick={() => setIsImageDialogOpen(false)}
-                              >
-                                Kapat
-                              </Button>
-                            </div>
-                          </div>
-                        );
-                      })()}
-                    </DialogContent>
-                  </Dialog>
-
-
+              <div className="pt-2">
+                <Label className="text-xs font-semibold text-slate-700">Sıralama Önceliği (Display Order)</Label>
+                <Input 
+                  type="number"
+                  min="0"
+                  placeholder="0"
+                  value={formData.displayOrder === 0 ? "" : (formData.displayOrder ?? "")} 
+                  onChange={(e) => setFormData({ ...formData, displayOrder: e.target.value === "" ? 0 : Number(e.target.value) })} 
+                  disabled={isViewer} 
+                  className="h-9 w-28 text-center text-xs font-mono font-bold mt-1"
+                />
+                <p className="text-[10px] text-muted-foreground mt-1">Düşük sayılar listelerde daha önce görünür.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* TAB 2: RENKLER & VARYANTLAR */}
+      {activeTab === "variants" && (
+        <div className="space-y-6">
           {/* Renkler, Görseller ve Varyantlar */}
           <div className="bg-card border border-slate-200/80 rounded-2xl p-6 shadow-xs space-y-5">
             <div className="flex items-center justify-between border-b pb-4">
@@ -1583,234 +1729,548 @@ export default function ProductDetailPage() {
             )}
           </div>
         </div>
+      )}
 
-        {/* Sağ Kolon (Fiyat, İndirim & Görünürlük) */}
+      {/* TAB 3: DAHİL OLDUĞU KOMBİNLER */}
+      {activeTab === "outfits" && (
         <div className="space-y-6">
-          
-          {/* Fiyat & İndirim Kartı */}
-          <div className="bg-card border border-slate-200/80 rounded-2xl p-6 shadow-xs space-y-4">
-            <div className="flex items-center gap-3 border-b pb-4">
-              <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
-                <Percent className="w-4 h-4" />
-              </div>
-              <div>
-                <h2 className="text-base font-bold text-slate-900">Fiyat & İndirim</h2>
-                <p className="text-xs text-muted-foreground">Satış fiyatı ve kampanya tarihleri</p>
-              </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label className="text-xs font-semibold text-slate-700">Taban Satış Fiyatı (TL)</Label>
-              <div className="relative">
-                <Input 
-                  type="number"
-                  value={formData.basePrice} 
-                  onChange={(e) => setFormData({ ...formData, basePrice: Number(e.target.value) })} 
-                  disabled={isViewer} 
-                  className="font-bold text-lg h-11 pr-10"
-                />
-                <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">TL</span>
-              </div>
-            </div>
-
-            <div className="space-y-1.5 pt-1">
-              <div className="flex items-center justify-between">
-                <Label className="text-xs font-semibold text-slate-700">İndirimli Fiyat (Opsiyonel)</Label>
-                {formData.discountPrice && formData.basePrice > formData.discountPrice && (
-                  <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-                    %{Math.round(((formData.basePrice - formData.discountPrice) / formData.basePrice) * 100)} İndirim
-                  </span>
-                )}
-              </div>
-              <div className="relative">
-                <Input 
-                  type="number"
-                  value={formData.discountPrice || ""} 
-                  onChange={(e) => setFormData({ ...formData, discountPrice: e.target.value ? Number(e.target.value) : undefined })} 
-                  disabled={isViewer} 
-                  placeholder="İndirimsiz bırakmak için boş geçin"
-                  className="h-10 text-sm pr-10"
-                />
-                <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">TL</span>
-              </div>
-            </div>
-            
-            <div className="grid grid-cols-2 gap-2 pt-2">
-              <div className="space-y-1">
-                <Label className="text-[11px] text-muted-foreground font-medium flex items-center gap-1">
-                  <Clock className="w-3 h-3" /> Başlangıç
-                </Label>
-                <Input 
-                  type="datetime-local" 
-                  value={formData.discountStartDate ? formData.discountStartDate.slice(0, 16) : ""}
-                  onChange={(e) => setFormData({ ...formData, discountStartDate: e.target.value || undefined })}
-                  disabled={isViewer}
-                  className="text-xs h-8"
-                />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-[11px] text-muted-foreground font-medium flex items-center gap-1">
-                  <Clock className="w-3 h-3" /> Bitiş
-                </Label>
-                <Input 
-                  type="datetime-local" 
-                  value={formData.discountEndDate ? formData.discountEndDate.slice(0, 16) : ""}
-                  onChange={(e) => setFormData({ ...formData, discountEndDate: e.target.value || undefined })}
-                  disabled={isViewer}
-                  className="text-xs h-8"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Görünürlük & Etiketler Kartı */}
-          <div className="bg-card border border-slate-200/80 rounded-2xl p-6 shadow-xs space-y-4">
-            <div className="flex items-center gap-3 border-b pb-4">
-              <div className="w-9 h-9 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center">
-                <Sparkles className="w-4 h-4" />
-              </div>
-              <div>
-                <h2 className="text-base font-bold text-slate-900">Vitrin & Görünürlük</h2>
-                <p className="text-xs text-muted-foreground">Mağazadaki öne çıkarma ayarları</p>
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              <div className="flex items-center justify-between p-2.5 rounded-xl border border-slate-200/80 bg-slate-50/50">
-                <div className="space-y-0.5">
-                  <Label className="text-xs font-semibold text-slate-800 flex items-center gap-1.5 cursor-pointer">
-                    <Star className="w-3.5 h-3.5 text-amber-500" /> Öne Çıkan Ürün
-                  </Label>
-                  <p className="text-[10px] text-muted-foreground">Anasayfa vitrininde görünür.</p>
-                </div>
-                <Switch 
-                  checked={Boolean(formData.isFeatured)}
-                  onCheckedChange={(c) => setFormData({ ...formData, isFeatured: c })}
-                  disabled={isViewer}
-                />
-              </div>
-
-              <div className="flex items-center justify-between p-2.5 rounded-xl border border-slate-200/80 bg-slate-50/50">
-                <div className="space-y-0.5">
-                  <Label className="text-xs font-semibold text-slate-800 flex items-center gap-1.5 cursor-pointer">
-                    <TrendingUp className="w-3.5 h-3.5 text-rose-500" /> Çok Satanlar
-                  </Label>
-                  <p className="text-[10px] text-muted-foreground">Trendler listesinde görünür.</p>
-                </div>
-                <Switch 
-                  checked={Boolean(formData.isBestSeller)}
-                  onCheckedChange={(c) => setFormData({ ...formData, isBestSeller: c })}
-                  disabled={isViewer}
-                />
-              </div>
-
-              <div className="flex items-center justify-between p-2.5 rounded-xl border border-slate-200/80 bg-slate-50/50">
-                <div className="space-y-0.5">
-                  <Label className="text-xs font-semibold text-slate-800 flex items-center gap-1.5 cursor-pointer">
-                    <Clock className="w-3.5 h-3.5 text-indigo-500" /> Yeni Gelenler
-                  </Label>
-                  <p className="text-[10px] text-muted-foreground">Yeni sezon listesinde görünür.</p>
-                </div>
-                <Switch 
-                  checked={Boolean(formData.isNewArrival)}
-                  onCheckedChange={(c) => setFormData({ ...formData, isNewArrival: c })}
-                  disabled={isViewer}
-                />
-              </div>
-
-              <div className="pt-2">
-                <Label className="text-xs font-semibold text-slate-700">Sıralama Önceliği (Display Order)</Label>
-                <Input 
-                  type="number"
-                  min="0"
-                  placeholder="0"
-                  value={formData.displayOrder === 0 ? "" : (formData.displayOrder ?? "")} 
-                  onChange={(e) => setFormData({ ...formData, displayOrder: e.target.value === "" ? 0 : Number(e.target.value) })} 
-                  disabled={isViewer} 
-                  className="h-9 w-28 text-center text-xs font-mono font-bold mt-1"
-                />
-                <p className="text-[10px] text-muted-foreground mt-1">Düşük sayılar listelerde daha önce görünür.</p>
-              </div>
-            </div>
-          </div>
-
-          {/* 🌟 ÜRÜN ÖZELLİKLERİ (FEATURES) 🌟 */}
-          <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-xs space-y-4">
-            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-              <div className="flex items-center gap-2">
-                <div className="p-1.5 rounded-lg bg-emerald-50 text-emerald-700">
-                  <BadgeCheck className="w-4 h-4" />
+          <div className="bg-card border border-slate-200/80 rounded-2xl p-6 shadow-xs space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b pb-5">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+                  <Sparkles className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-slate-900">Ürün Özellikleri</h3>
-                  <p className="text-[10px] text-muted-foreground">Kumaş, yıkama ve teknik detaylar</p>
+                  <h2 className="text-base font-bold text-slate-900">Dahil Olduğu Kombinler</h2>
+                  <p className="text-xs text-muted-foreground">
+                    Bu ürünün yer aldığı kombin setleri ve set satış fiyatları
+                  </p>
                 </div>
               </div>
-              <Badge variant="secondary" className="text-[10px] font-semibold">
-                {formData.featureIds?.length || 0} seçildi
-              </Badge>
             </div>
 
-            <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
-              {allFeatures.map((f: any) => {
-                const isSelected = formData.featureIds?.includes(f.id) || false;
-                return (
-                  <label
-                    key={f.id}
-                    className={`flex items-center justify-between p-2.5 rounded-xl border transition-all cursor-pointer ${
-                      isSelected
-                        ? "border-primary bg-primary/5 text-primary font-medium shadow-2xs"
-                        : "border-slate-200/70 hover:bg-slate-50/70 text-slate-700"
-                    }`}
-                  >
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <div
-                        className={`w-4 h-4 flex items-center justify-center border rounded-sm shrink-0 transition-colors ${
-                          isSelected
-                            ? "bg-primary border-primary text-primary-foreground"
-                            : "border-slate-300"
-                        }`}
-                      >
-                        {isSelected && <Check className="w-3 h-3" />}
-                      </div>
-                      {f.icon && (
-                        <div className="w-5 h-5 bg-white border border-slate-200/60 rounded p-0.5 flex items-center justify-center shrink-0">
-                          <img
-                            src={getImageUrl(f.icon)}
-                            alt={f.name}
-                            className="max-w-full max-h-full object-contain"
-                          />
+            {isProductOutfitsLoading ? (
+              <div className="flex flex-col items-center justify-center py-16 text-center">
+                <Spinner className="w-8 h-8 text-amber-600 mb-3" />
+                <p className="text-sm font-semibold text-slate-700">Kombinler Getiriliyor...</p>
+                <p className="text-xs text-muted-foreground">Lütfen bekleyiniz</p>
+              </div>
+            ) : productOutfits && productOutfits.length > 0 ? (
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {productOutfits.map((outfit) => (
+                    <div
+                      key={outfit.outfitId}
+                      className="p-4 rounded-xl border border-slate-200/90 bg-slate-50/60 flex flex-col justify-between gap-4 shadow-2xs hover:border-amber-400/60 transition-colors"
+                    >
+                      <div className="flex items-start gap-3">
+                        <div className="w-16 h-20 rounded-lg bg-slate-100 overflow-hidden shrink-0 border border-slate-200 flex items-center justify-center relative">
+                          {outfit.coverImageUrl ? (
+                            <img
+                              src={getImageUrl(outfit.coverImageUrl)}
+                              alt={outfit.outfitTitle}
+                              className="w-full h-full object-cover"
+                              onError={(e) => {
+                                (e.target as HTMLElement).style.display = "none";
+                              }}
+                            />
+                          ) : (
+                            <ImageIcon className="w-6 h-6 text-slate-400" />
+                          )}
                         </div>
-                      )}
-                      <span className="text-xs truncate">{f.name}</span>
-                    </div>
-                    <input
-                      type="checkbox"
-                      className="hidden"
-                      checked={isSelected}
-                      disabled={isViewer}
-                      onChange={(e) => {
-                        const current = formData.featureIds || [];
-                        const next = e.target.checked
-                          ? [...current, f.id]
-                          : current.filter((id: number) => id !== f.id);
-                        setFormData({ ...formData, featureIds: next });
-                      }}
-                    />
-                  </label>
-                );
-              })}
+                        <div className="flex-1 min-w-0">
+                          <h4 className="text-sm font-bold text-slate-900 truncate">
+                            {outfit.outfitTitle}
+                          </h4>
+                          <p className="text-[11px] text-muted-foreground mt-1.5">
+                            {outfit.itemCount ?? outfit.totalPiecesCount ?? 0} Parça Ürün
+                          </p>
+                          <p className="text-[11px] font-medium text-slate-700">
+                            Parça Toplamı: {(outfit.totalOriginalPrice ?? outfit.currentItemsTotalPrice ?? 0).toLocaleString("tr-TR")} ₺
+                          </p>
+                          <Link
+                            href="/admin/outfits"
+                            className="inline-flex items-center gap-1 mt-2 text-[11px] font-semibold text-slate-600 hover:text-slate-900 border border-slate-200 bg-white hover:bg-slate-50 rounded-lg px-2.5 py-1 transition-colors"
+                          >
+                            <Pencil className="w-3 h-3" />
+                            Düzenle
+                          </Link>
+                        </div>
+                      </div>
 
-              {allFeatures.length === 0 && (
-                <div className="py-4 text-center text-xs text-muted-foreground">
-                  Tanımlı özellik bulunamadı.
+                      <div className="flex items-center justify-between gap-3 pt-3 border-t border-slate-200/70">
+                        <Label className="text-xs font-semibold text-slate-700 whitespace-nowrap">
+                          Kombin Set Fiyatı:
+                        </Label>
+                        <div className="w-36 relative">
+                          <Input
+                            type="number"
+                            min="0"
+                            value={outfitPrices[outfit.outfitId] ?? outfit.currentOutfitPrice}
+                            onChange={(e) =>
+                              setOutfitPrices({
+                                ...outfitPrices,
+                                [outfit.outfitId]: Number(e.target.value),
+                              })
+                            }
+                            disabled={isViewer}
+                            className="h-9 text-sm font-bold pr-8 text-right bg-white"
+                          />
+                          <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">
+                            ₺
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="flex items-center justify-between pt-4 border-t">
+                  <p className="text-xs text-muted-foreground">
+                    Toplam <span className="font-semibold text-slate-900">{productOutfits.length}</span> kombin listeleniyor
+                  </p>
+                  {!isViewer && (
+                    <Button
+                      type="button"
+                      onClick={handleSaveOutfitPrices}
+                      disabled={isUpdatingOutfitPrices}
+                      size="sm"
+                      className="bg-amber-600 hover:bg-amber-700 text-white font-semibold text-xs h-9"
+                    >
+                      {isUpdatingOutfitPrices ? (
+                        <>
+                          <Spinner className="w-3.5 h-3.5 mr-2" />
+                          Güncelleniyor...
+                        </>
+                      ) : (
+                        <>
+                          <Save className="w-3.5 h-3.5 mr-1.5" />
+                          Kombin Fiyatlarını Güncelle
+                        </>
+                      )}
+                    </Button>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-16 text-muted-foreground border-2 border-dashed rounded-2xl p-8 space-y-3 bg-slate-50/50">
+                <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto">
+                  <Sparkles className="w-6 h-6" />
+                </div>
+                <h3 className="text-sm font-bold text-slate-900">Bu ürün henüz herhangi bir kombine eklenmemiş</h3>
+                <p className="text-xs text-muted-foreground max-w-md mx-auto">
+                  Ürünü kombinlerde kullanmak ve set fiyatları tanımlamak için Kombinler modülünden yeni bir kombin oluşturabilirsiniz.
+                </p>
+                <div className="pt-2">
+                  <Link
+                    href="/admin/outfits"
+                    className="inline-flex items-center justify-center h-9 px-4 rounded-xl bg-slate-900 text-white text-xs font-semibold hover:bg-slate-800 transition-colors"
+                  >
+                    + Yeni Kombin Oluştur
+                  </Link>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Modallar */}
+      <Dialog open={isImageDialogOpen} onOpenChange={(open) => {
+                    setIsImageDialogOpen(open);
+                    if (!open) {
+                      setActiveImageColorId(null);
+                      setNewImage({ file: null, globalColorId: "", isMain: false, isProductMain: false });
+                    }
+                  }}>
+                    <DialogContent className="sm:max-w-3xl w-full max-h-[90vh] overflow-y-auto p-6 rounded-2xl bg-white shadow-2xl">
+                      {(() => {
+                        const pc = productColors?.find((p: any) => p.id === activeImageColorId);
+                        const color = globalColors?.find((c: any) => c.id === pc?.colorId);
+                        const activeImages = images?.filter((img: any) => img.productColorId === activeImageColorId) || [];
+                        const canAddMore = activeImages.length < 5;
+
+                        return (
+                          <div className="space-y-6">
+                            {/* Modal Başlığı */}
+                            <div className="flex items-center justify-between pb-4 border-b">
+                              <div className="flex items-center gap-3">
+                                <div 
+                                  className="w-5 h-5 rounded-full border shadow-sm ring-2 ring-slate-100" 
+                                  style={{ backgroundColor: color?.hexCode || "#ccc" }} 
+                                />
+                                <div>
+                                  <DialogTitle className="text-lg font-bold text-slate-900">
+                                    {color ? `${color.name} Görselleri` : "Görselleri Yönet"}
+                                  </DialogTitle>
+                                  <p className="text-xs text-muted-foreground mt-0.5">
+                                    Bu renge ait görselleri görüntüleyebilir, vitrin veya ana renk atayabilirsiniz.
+                                  </p>
+                                </div>
+                              </div>
+                              <Badge 
+                                variant={canAddMore ? "outline" : "destructive"} 
+                                className="font-semibold text-xs px-3 py-1 bg-slate-50"
+                              >
+                                {activeImages.length} / 5 Görsel
+                              </Badge>
+                            </div>
+
+                            {/* 1. Kısım: Mevcut Görseller Galerisi */}
+                            <div>
+                              <div className="flex items-center justify-between mb-3">
+                                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-600 flex items-center gap-1.5">
+                                  <ImageIcon className="w-4 h-4 text-slate-500" /> Mevcut Görseller ({activeImages.length})
+                                </h3>
+                                <span className="text-[11px] text-muted-foreground">İşlem yapmak için görselin üzerine gelin</span>
+                              </div>
+
+                              {activeImages.length === 0 ? (
+                                <div className="border-2 border-dashed rounded-xl p-8 flex flex-col items-center justify-center text-center bg-slate-50/60 text-slate-400">
+                                  <ImageIcon className="w-8 h-8 text-slate-300 mb-2" />
+                                  <p className="text-xs font-medium text-slate-600">Bu renge ait henüz görsel yüklenmedi.</p>
+                                </div>
+                              ) : (
+                                <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 gap-3.5">
+                                  {activeImages.map((img: any) => (
+                                    <div 
+                                      key={img.id} 
+                                      className="relative group rounded-xl overflow-hidden border border-slate-200 aspect-[3/4] shadow-xs bg-slate-100 transition-all duration-200 hover:shadow-md hover:border-slate-300"
+                                    >
+                                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                                      <img 
+                                        src={getImageUrl(img.imageUrl)} 
+                                        alt="product" 
+                                        className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" 
+                                        onError={(e) => {
+                                          (e.target as HTMLImageElement).src = 'https://placehold.co/400x400?text=Gorsel+Bulunamadi';
+                                        }}
+                                      />
+                                      
+                                      {/* Normal Görünümde Aktif Rozetler */}
+                                      <div className="absolute top-2 left-2 flex flex-col gap-1 items-start z-10 pointer-events-none transition-opacity duration-200 group-hover:opacity-0">
+                                        {img.isProductMain && (
+                                          <span className="inline-flex items-center gap-1 bg-emerald-600/90 backdrop-blur-md text-white text-[9px] font-bold px-2 py-0.5 rounded-full shadow-xs">
+                                            <Star className="w-2.5 h-2.5 fill-current" /> Vitrin
+                                          </span>
+                                        )}
+                                        {img.isMain && (
+                                          <span className="inline-flex items-center gap-1 bg-amber-600/90 backdrop-blur-md text-white text-[9px] font-bold px-2 py-0.5 rounded-full shadow-xs">
+                                            <Palette className="w-2.5 h-2.5" /> Ana Renk
+                                          </span>
+                                        )}
+                                      </div>
+
+                                      {/* Hover Durumunda Açılan Eylemler */}
+                                      {!isViewer && (
+                                        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-black/60 backdrop-blur-[2px] opacity-0 group-hover:opacity-100 transition-all duration-200 flex flex-col justify-between p-2 z-20">
+                                          <div className="flex justify-end">
+                                            <button 
+                                              type="button"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                setImageToDelete(img.id);
+                                              }}
+                                              className="h-6 w-6 rounded-full bg-red-500/90 hover:bg-red-600 text-white flex items-center justify-center shadow-md transition-transform active:scale-95 hover:scale-105"
+                                              title="Görseli Sil"
+                                            >
+                                              <Trash2 className="w-3 h-3" />
+                                            </button>
+                                          </div>
+
+                                          <div className="flex flex-col gap-1 w-full">
+                                            <button
+                                              type="button"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleToggleImageFlags(img, "isProductMain", !img.isProductMain);
+                                              }}
+                                              className={`w-full py-1 px-1 rounded-md text-[10px] font-semibold flex items-center justify-center gap-1 transition-all shadow-xs active:scale-95 ${
+                                                img.isProductMain 
+                                                  ? 'bg-emerald-600 text-white ring-1 ring-emerald-400' 
+                                                  : 'bg-white/20 hover:bg-white/35 text-white backdrop-blur-md border border-white/20'
+                                              }`}
+                                            >
+                                              <Star className="w-2.5 h-2.5" fill={img.isProductMain ? "currentColor" : "none"} />
+                                              <span>{img.isProductMain ? "Vitrin" : "Vitrin Yap"}</span>
+                                            </button>
+
+                                            <button
+                                              type="button"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleToggleImageFlags(img, "isMain", !img.isMain);
+                                              }}
+                                              className={`w-full py-1 px-1 rounded-md text-[10px] font-semibold flex items-center justify-center gap-1 transition-all shadow-xs active:scale-95 ${
+                                                img.isMain 
+                                                  ? 'bg-amber-600 text-white ring-1 ring-amber-400' 
+                                                  : 'bg-white/20 hover:bg-white/35 text-white backdrop-blur-md border border-white/20'
+                                              }`}
+                                            >
+                                              <Palette className="w-2.5 h-2.5" />
+                                              <span>{img.isMain ? "Ana Renk" : "Ana Renk Yap"}</span>
+                                            </button>
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+
+                            {/* 2. Kısım: Yeni Görsel Ekle Formu */}
+                            <div className="pt-5 border-t space-y-4">
+                              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-600 flex items-center gap-1.5">
+                                <UploadCloud className="w-4 h-4 text-slate-500" /> Yeni Görsel Yükle
+                              </h3>
+
+                              {!canAddMore ? (
+                                <div className="p-3.5 rounded-xl bg-orange-50 border border-orange-200 text-orange-800 text-xs flex items-center gap-2">
+                                  <AlertCircle className="w-4 h-4 text-orange-600 shrink-0" />
+                                  <span>Bu renk için maksimum 5 görsel sınırına ulaşıldı. Yeni görsel yüklemek için önce mevcut bir görseli silin.</span>
+                                </div>
+                              ) : (
+                                <form onSubmit={handleAddImage} className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center bg-slate-50/80 p-4 rounded-xl border border-slate-200/80">
+                                  {/* Dosya Seçme / Önizleme (5 Kolon) */}
+                                  <div className="md:col-span-5">
+                                    {!newImage.file ? (
+                                      <label className="border-2 border-dashed border-slate-300 hover:border-primary/50 hover:bg-primary/5 rounded-xl p-3 flex items-center justify-center gap-2.5 cursor-pointer transition-all text-center">
+                                        <UploadCloud className="w-5 h-5 text-slate-400" />
+                                        <div>
+                                          <p className="text-xs font-semibold text-slate-700">Dosya Seçin</p>
+                                          <p className="text-[10px] text-muted-foreground">PNG, JPG, WEBP</p>
+                                        </div>
+                                        <input 
+                                          type="file" 
+                                          accept="image/*"
+                                          className="hidden"
+                                          onChange={(e) => setNewImage({ ...newImage, file: e.target.files?.[0] || null })}
+                                        />
+                                      </label>
+                                    ) : (
+                                      <div className="flex items-center gap-2.5 p-2 rounded-xl bg-white border border-slate-200 shadow-2xs">
+                                        <div className="w-10 h-10 rounded-lg overflow-hidden border border-slate-100 bg-slate-50 shrink-0">
+                                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                                          <img 
+                                            src={URL.createObjectURL(newImage.file)} 
+                                            alt="Preview" 
+                                            className="w-full h-full object-cover"
+                                          />
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                          <p className="text-xs font-medium text-slate-800 truncate">{newImage.file.name}</p>
+                                          <p className="text-[10px] text-muted-foreground">{(newImage.file.size / 1024).toFixed(0)} KB</p>
+                                        </div>
+                                        <Button 
+                                          type="button" 
+                                          variant="ghost" 
+                                          size="icon" 
+                                          className="h-6 w-6 text-slate-400 hover:text-red-600 rounded-full"
+                                          onClick={() => setNewImage({ ...newImage, file: null })}
+                                        >
+                                          <X className="w-3.5 h-3.5" />
+                                        </Button>
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  {/* Seçenek Anahtarları (4 Kolon) */}
+                                  <div className="md:col-span-4 space-y-2">
+                                    <div className="flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-white border border-slate-200/80">
+                                      <Label className="text-[11px] font-medium flex items-center gap-1.5 cursor-pointer">
+                                        <Star className="w-3 h-3 text-emerald-600" /> Vitrin Görseli
+                                      </Label>
+                                      <Switch 
+                                        checked={newImage.isProductMain}
+                                        onCheckedChange={(c) => setNewImage({ ...newImage, isProductMain: c })}
+                                        className="scale-75"
+                                      />
+                                    </div>
+                                    <div className="flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-white border border-slate-200/80">
+                                      <Label className="text-[11px] font-medium flex items-center gap-1.5 cursor-pointer">
+                                        <Palette className="w-3 h-3 text-amber-600" /> Ana Renk Görseli
+                                      </Label>
+                                      <Switch 
+                                        checked={newImage.isMain}
+                                        onCheckedChange={(c) => setNewImage({ ...newImage, isMain: c })}
+                                        className="scale-75"
+                                      />
+                                    </div>
+                                  </div>
+
+                                  {/* Yükle Butonu (3 Kolon) */}
+                                  <div className="md:col-span-3">
+                                    <Button 
+                                      type="submit" 
+                                      className="w-full h-10 font-semibold text-xs shadow-sm"
+                                      disabled={!newImage.file || addProductImageMutation.isPending}
+                                    >
+                                      {addProductImageMutation.isPending ? (
+                                        <Spinner size="sm" className="mr-1.5" />
+                                      ) : (
+                                        <Upload className="w-3.5 h-3.5 mr-1.5" />
+                                      )}
+                                      Görseli Yükle
+                                    </Button>
+                                  </div>
+                                </form>
+                              )}
+                            </div>
+
+                            {/* Modal Kapat Butonu */}
+                            <div className="flex justify-end pt-2">
+                              <Button 
+                                type="button" 
+                                variant="outline" 
+                                size="sm"
+                                onClick={() => setIsImageDialogOpen(false)}
+                              >
+                                Kapat
+                              </Button>
+                            </div>
+                          </div>
+                        );
+                      })()}
+                    </DialogContent>
+                  </Dialog>
+
+      <Dialog open={isOutfitsModalOpen} onOpenChange={setIsOutfitsModalOpen}>
+            <DialogContent className="sm:max-w-4xl max-w-4xl max-h-[85vh] overflow-y-auto">
+              <DialogHeader>
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+                    <Sparkles className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <DialogTitle className="text-lg font-bold text-slate-900">
+                      Dahil Olduğu Kombinler
+                    </DialogTitle>
+                    <DialogDescription className="text-xs text-muted-foreground">
+                      {isPriceChangeTriggered
+                        ? "Ürün fiyatı değişti! İlgili kombinlerin set fiyatlarını aşağıdan kontrol edip güncelleyebilirsiniz."
+                        : "Bu ürünün yer aldığı kombinler ve set satış fiyatları."}
+                    </DialogDescription>
+                  </div>
+                </div>
+              </DialogHeader>
+
+              {isPriceChangeTriggered && (
+                <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-900 flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                  <span>Ürün satış veya indirimli fiyatı değişti. Bu ürünün yer aldığı kombinlerin set fiyatlarını aşağıdan kontrol edebilirsiniz.</span>
                 </div>
               )}
-            </div>
-          </div>
 
-        </div>
-      </div>
+              {isProductOutfitsLoading ? (
+                <div className="flex flex-col items-center justify-center py-12">
+                  <Spinner className="w-6 h-6 text-amber-600" />
+                  <p className="text-xs text-muted-foreground mt-2">Kombinler getiriliyor...</p>
+                </div>
+              ) : productOutfits && productOutfits.length > 0 ? (
+                <div className="space-y-4 pt-2">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {productOutfits.map((outfit) => (
+                      <div
+                        key={outfit.outfitId}
+                        className="p-3.5 rounded-xl border border-slate-200/90 bg-slate-50/50 flex flex-col justify-between gap-3 shadow-2xs"
+                      >
+                        <div className="flex items-start gap-3">
+                          <div className="w-14 h-16 rounded-lg bg-slate-100 overflow-hidden shrink-0 border border-slate-200 flex items-center justify-center relative">
+                            {outfit.coverImageUrl ? (
+                              <img
+                                src={getImageUrl(outfit.coverImageUrl)}
+                                alt={outfit.outfitTitle}
+                                className="w-full h-full object-cover"
+                                onError={(e) => {
+                                  (e.target as HTMLElement).style.display = "none";
+                                }}
+                              />
+                            ) : (
+                              <ImageIcon className="w-5 h-5 text-slate-400" />
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h4 className="text-xs font-bold text-slate-900 truncate">
+                              {outfit.outfitTitle}
+                            </h4>
+                            <p className="text-[10px] text-muted-foreground mt-1">
+                              {outfit.itemCount ?? outfit.totalPiecesCount ?? 0} Parça Ürün · Parça Toplamı: {(outfit.totalOriginalPrice ?? outfit.currentItemsTotalPrice ?? 0).toLocaleString("tr-TR")} ₺
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-200/70">
+                          <Label className="text-xs font-semibold text-slate-700 whitespace-nowrap">
+                            Kombin Set Fiyatı (₺):
+                          </Label>
+                          <div className="w-32 relative">
+                            <Input
+                              type="number"
+                              min="0"
+                              value={outfitPrices[outfit.outfitId] ?? outfit.currentOutfitPrice}
+                              onChange={(e) =>
+                                setOutfitPrices({
+                                  ...outfitPrices,
+                                  [outfit.outfitId]: Number(e.target.value),
+                                })
+                              }
+                              disabled={isViewer}
+                              className="h-8 text-xs font-bold pr-7 text-right bg-white"
+                            />
+                            <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400">
+                              TL
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <DialogFooter className="pt-3 border-t flex flex-row items-center justify-end gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setIsOutfitsModalOpen(false)}
+                    >
+                      Kapat
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={handleSaveOutfitPrices}
+                      disabled={isViewer || isUpdatingOutfitPrices}
+                      className="bg-amber-600 hover:bg-amber-700 text-white font-semibold text-xs"
+                    >
+                      {isUpdatingOutfitPrices ? (
+                        <>
+                          <Spinner className="w-3.5 h-3.5 mr-2" />
+                          Güncelleniyor...
+                        </>
+                      ) : (
+                        <>
+                          <Save className="w-3.5 h-3.5 mr-1.5" />
+                          Kombin Fiyatlarını Güncelle
+                        </>
+                      )}
+                    </Button>
+                  </DialogFooter>
+                </div>
+              ) : (
+                <div className="text-center py-10 text-muted-foreground border border-dashed rounded-xl p-6 space-y-2">
+                  <p className="text-sm font-medium text-slate-700">Bu ürün henüz herhangi bir kombine eklenmemiş.</p>
+                  <p className="text-xs">Ürünü kombinlerde kullanmak için Kombinler modülünden yeni kombin oluşturabilirsiniz.</p>
+                  <Link
+                    href="/admin/outfits"
+                    className="text-primary hover:underline font-semibold text-xs inline-block pt-1"
+                  >
+                    + Yeni Kombin Oluştur
+                  </Link>
+                </div>
+              )}
+            </DialogContent>
+          </Dialog>
 
       <AlertDialog open={!!imageToDelete} onOpenChange={(open) => !open && setImageToDelete(null)}>
         <AlertDialogContent>

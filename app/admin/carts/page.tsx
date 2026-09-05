@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { ColumnDef } from "@tanstack/react-table";
 import { useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
-import { ShoppingCart, Eye, Trash2, Clock, User as UserIcon } from "lucide-react";
+import { ShoppingCart, Eye, Trash2, Clock, User as UserIcon, Sparkles } from "lucide-react";
 import { useSession } from "next-auth/react";
 
 import { useCarts, useDeleteCart } from "@/hooks/useCarts";
@@ -117,6 +117,45 @@ export default function CartsPage() {
               )}
             </div>
           </div>
+        );
+      },
+    },
+    {
+      accessorKey: "content",
+      header: "Sepet İçeriği",
+      cell: ({ row }) => {
+        const cart = row.original;
+        const hasOutfit = cart.hasOutfit;
+        const outfitTitles = cart.outfitTitles || [];
+
+        return (
+          <div className="flex flex-col gap-1 items-start">
+            {hasOutfit ? (
+              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200/80 px-2 py-0.5 rounded-md">
+                <Sparkles className="h-3 w-3 text-amber-500 shrink-0" />
+                {outfitTitles.length > 0 ? outfitTitles.join(", ") : "Kombin Seti"}
+              </span>
+            ) : null}
+            <span className="text-xs text-muted-foreground">
+              {cart.totalItemCount !== undefined && cart.totalItemCount > 0
+                ? `${cart.totalItemCount} Parça Ürün`
+                : "Ürün Yok"}
+            </span>
+          </div>
+        );
+      },
+    },
+    {
+      accessorKey: "totalAmount",
+      header: "Toplam Tutar",
+      cell: ({ row }) => {
+        const amount = row.original.totalAmount;
+        return (
+          <span className="font-semibold text-sm">
+            {amount !== undefined && amount > 0
+              ? `₺${amount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}`
+              : "-"}
+          </span>
         );
       },
     },

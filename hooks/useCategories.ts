@@ -81,7 +81,7 @@ export function useUpdateCategory() {
 export function useDeleteCategory() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (id: number) => axiosInstance.delete("/api/categories", { data: { id } }),
+    mutationFn: (id: number) => axiosInstance.delete("/api/categories/softdelete", { data: { id } }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["categories"] });
       queryClient.invalidateQueries({ queryKey: ["categories-lookup-root"] });
